@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+*.db
+farmpilot.db
+/.env
+.env
+/.vscode/
+node_modules/
+Frontend/my-app/.next/
