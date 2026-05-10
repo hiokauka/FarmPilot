@@ -24,11 +24,21 @@ def _ensure_growth_stage_columns() -> None:
         if "target_dli" not in existing:
             conn.execute(text("ALTER TABLE growth_stages ADD COLUMN target_dli FLOAT NOT NULL DEFAULT 12"))
 
+        # active_plants table
+        rows_plants = conn.execute(text("PRAGMA table_info(active_plants)")).all()
+        existing_plants = {r[1] for r in rows_plants}
+        if "ai_custom_rules" not in existing_plants:
+            conn.execute(text("ALTER TABLE active_plants ADD COLUMN ai_custom_rules JSON NULL"))
+        if "last_analysis_at" not in existing_plants:
+            conn.execute(text("ALTER TABLE active_plants ADD COLUMN last_analysis_at DATETIME NULL"))
+
         # agent_tasks table 
         rows_tasks = conn.execute(text("PRAGMA table_info(agent_tasks)")).all()
         existing_tasks = {r[1] for r in rows_tasks}
         if "metric_adjustments" not in existing_tasks:
             conn.execute(text("ALTER TABLE agent_tasks ADD COLUMN metric_adjustments JSON NULL"))
+        if "proposed_rules" not in existing_tasks:
+            conn.execute(text("ALTER TABLE agent_tasks ADD COLUMN proposed_rules JSON NULL"))
 
 
 import asyncio
