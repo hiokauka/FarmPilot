@@ -301,52 +301,31 @@ def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
     
-    # Construct virtual sensors derived purely and cleanly from core plant columns
-    # This bypasses needing a heavy simulator while satisfying requirements perfectly.
+    # REPAIR: Connect route to ACTUAL live DB sensor records synchronized from simulator!
+    if plant.sensors:
+        return [
+            {
+                "id": s.id,
+                "type": s.sensor_type,
+                "modelName": s.model_name,
+                "batteryLevel": s.battery_level,
+                "status": s.status,
+                "activePlantId": s.active_plant_id,
+                "lastSync": s.last_sync.isoformat() if s.last_sync else None,
+                "currentValue": s.current_value
+            } for s in plant.sensors
+        ]
+    
+    # SAFE FALLBACK: Only generate default mocks if simulator hasn't initialized sensors yet.
     from datetime import timezone
     now_ts = datetime.now(timezone.utc).isoformat()
     
     return [
-        {
-            "id": f"S-TEMP-{plant.id}",
-            "type": "Temperature",
-            "modelName": "DHT-22 Plus Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.temperature
-        },
-        {
-            "id": f"S-HUM-{plant.id}",
-            "type": "Humidity",
-            "modelName": "DHT-22 Plus Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.humidity
-        },
-        {
-            "id": f"S-DLI-{plant.id}",
-            "type": "Light",
-            "modelName": "PAR Meter X Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.dli
-        },
-        {
-            "id": f"S-SM-{plant.id}",
-            "type": "Soil_Moisture",
-            "modelName": "Capacitive SM-3 Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.soil_moisture
-        }
+        {"id": f"S-TEMP-{plant.id}", "type": "Temperature", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.temperature},
+        {"id": f"S-HUM-{plant.id}", "type": "Humidity", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.humidity},
+        {"id": f"S-DLI-{plant.id}", "type": "Light", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.dli},
+        {"id": f"S-SM-{plant.id}", "type": "Soil_Moisture", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.soil_moisture},
+        {"id": f"S-PH-{plant.id}", "type": "pH", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.ph}
     ]
 
 

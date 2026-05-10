@@ -62,7 +62,7 @@ export interface Sensor {
   type: "Temperature" | "Humidity" | "Soil_Moisture" | "pH" | "EC" | "Light";
   modelName: string;
   batteryLevel: number;
-  status: "Online" | "Offline" | "Warning";
+  status: "Online" | "Offline" | "Warning" | "Interpolating";
   activePlantId: string;
   lastSync: Date;
   currentValue: number;
