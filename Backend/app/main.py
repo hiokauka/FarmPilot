@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 
 from contextlib import asynccontextmanager
 
@@ -31,7 +32,14 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         seed_database(db)
 
+    # Start the IoT Sync background task
+    from app.services.iot_sync import sync_sensors_task
+    sync_task = asyncio.create_task(sync_sensors_task())
+
     yield
+    
+    # Clean up
+    sync_task.cancel()
 
 
 app = FastAPI(title="FarmPilot API", version="0.1.0", lifespan=lifespan)

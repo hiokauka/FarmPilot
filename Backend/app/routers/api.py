@@ -11,6 +11,7 @@ from app.database import get_db
 from app.models import (
     ActivePlantRecord,
     CropProfileRecord,
+    SensorRecord,
 )
 
 router = APIRouter(prefix="/api")
@@ -19,6 +20,25 @@ router = APIRouter(prefix="/api")
 class CreatePlantPayload(BaseModel):
     customLabel: str
     cropProfileId: str
+
+
+class CreateSensorPayload(BaseModel):
+    sensorType: str
+    modelName: str
+    batteryLevel: int = 100
+
+
+def sensor_to_dict(s: SensorRecord) -> dict:
+    return {
+        "id": s.id,
+        "type": s.sensor_type,
+        "modelName": s.model_name,
+        "batteryLevel": s.battery_level,
+        "status": s.status,
+        "activePlantId": s.active_plant_id,
+        "lastSync": s.last_sync.isoformat(),
+        "currentValue": s.current_value,
+    }
 
 
 def plant_to_dict(p: ActivePlantRecord) -> dict:
@@ -120,3 +140,42 @@ def create_plant(payload: CreatePlantPayload, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(plant)
     return plant_to_dict(plant)
+
+
+@router.get("/plants/{plant_id}/sensors")
+def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    return [sensor_to_dict(s) for s in plant.sensors]
+
+
+@router.post("/plants/{plant_id}/sensors")
+def create_sensor(plant_id: str, payload: CreateSensorPayload, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    
+    # Simple mock current value based on sensor type and plant's current metrics
+    val = 0.0
+    st = payload.sensorType
+    if st == "Temperature": val = plant.temperature
+    elif st == "Humidity": val = plant.humidity
+    elif st == "Soil_Moisture": val = plant.soil_moisture
+    elif st == "pH": val = plant.ph
+    elif st == "Light": val = plant.dli
+
+    sensor = SensorRecord(
+        id=f"S-{int(time.time() * 1000) % 10000}",
+        sensor_type=payload.sensorType,
+        model_name=payload.modelName,
+        battery_level=payload.batteryLevel,
+        status="Online",
+        active_plant_id=plant.id,
+        last_sync=datetime.utcnow(),
+        current_value=val,
+    )
+    db.add(sensor)
+    db.commit()
+    db.refresh(sensor)
+    return sensor_to_dict(sensor)
