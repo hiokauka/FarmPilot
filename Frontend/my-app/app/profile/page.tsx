@@ -58,23 +58,34 @@ export default function PlantProfile() {
               const currentPos = ((range.current - (range.min * 0.5)) / totalRange) * 100;
 
               return (
-                <div key={i} className="flex flex-col gap-2">
-                  <div className="flex justify-between items-center text-sm font-medium text-zinc-300">
-                    <span>{range.label}</span>
-                    <span className="text-zinc-500">{range.min}{range.unit} — {range.max}{range.unit}</span>
+                <div key={i} className="flex flex-col gap-2 relative group">
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">{range.label}</span>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-extrabold text-zinc-100">{range.current.toFixed(1)}{range.unit}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-medium text-zinc-500">Target Band</span>
+                      <div className="text-sm font-semibold text-zinc-300">
+                        {range.min}{range.unit} <span className="text-zinc-600">to</span> {range.max}{range.unit}
+                      </div>
+                    </div>
                   </div>
                   
-                  <div className="relative h-3 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+                  <div className="relative h-3 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800 my-2">
                     {/* Optimal Range Highlight */}
                     <div 
                       className="absolute top-0 bottom-0 bg-emerald-500/20 border-x border-emerald-500/50"
-                      style={{ left: `${Math.max(0, minPos)}%`, width: `${maxPos - minPos}%` }}
+                      style={{ left: `${Math.max(0, minPos)}%`, width: `${Math.min(100 - minPos, maxPos - minPos)}%` }}
                     ></div>
                     {/* Current Value Marker */}
                     <div 
                       className="absolute top-0 bottom-0 w-1.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] z-10"
                       style={{ left: `calc(${Math.min(100, Math.max(0, currentPos))}% - 3px)` }}
-                    ></div>
+                    >
+                    </div>
                   </div>
                 </div>
               );

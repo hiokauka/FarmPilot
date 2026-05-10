@@ -7,57 +7,79 @@ from app.database import SessionLocal
 from app.models import ActivePlantRecord, SensorRecord
 
 logger = logging.getLogger("iot_sync")
-SIMULATOR_URL = "http://localhost:8090/sensors"
+# Note: We will append /{plant_id} dynamically during iteration
+SIMULATOR_BASE = "http://localhost:8090/sensors"
 
 async def sync_sensors_task():
-    """Background task to poll the sensor simulator and update the database."""
-    logger.info("Starting IoT Sensor Sync Service...")
+    """Background task to poll the sensor simulator per-plant and update the database."""
+    logger.info("Starting IoT Multi-Plant Sensor Sync Service...")
     
     while True:
-        await asyncio.sleep(5)  # Sync every 5 seconds
+        await asyncio.sleep(5)  # Tick rate
         
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                response = await client.get(SIMULATOR_URL)
-                if response.status_code != 200:
-                    logger.warning(f"Simulator returned status {response.status_code}")
+            with SessionLocal() as db:
+                plants = db.query(ActivePlantRecord).all()
+                if not plants:
                     continue
                 
-                sim_data = response.json()
-                
-                with SessionLocal() as db:
-                    # For this demo, we'll update the first active plant found
-                    # In a real app, you'd match by plant_id/device mapping
-                    plant = db.query(ActivePlantRecord).first()
-                    if not plant:
-                        continue
-                        
-                    for s_data in sim_data:
-                        # 1. Update/Create the individual sensor record
-                        sensor = db.query(SensorRecord).filter(SensorRecord.id == s_data["id"]).first()
-                        if sensor:
-                            sensor.current_value = s_data["value"]
-                            sensor.last_sync = datetime.now(timezone.utc)
-                            sensor.battery_level = s_data["battery"]
-                            sensor.status = s_data["status"]
-                        
-                        # 2. Map simulator types to plant metrics
-                        stype = s_data["type"]
-                        if stype == "Temperature":
-                            plant.temperature = s_data["value"]
-                        elif stype == "Humidity":
-                            plant.humidity = s_data["value"]
-                        elif stype == "Soil_Moisture":
-                            plant.soil_moisture = s_data["value"]
-                        elif stype == "pH":
-                            plant.ph = s_data["value"]
-                        elif stype == "Light":
-                            plant.dli = s_data["value"]
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    for plant in plants:
+                        try:
+                            target_url = f"{SIMULATOR_BASE}/{plant.id}"
+                            resp = await client.get(target_url)
                             
-                    db.commit()
-                    print(f"I/O SYNC: Successfully updated {len(sim_data)} sensors.")
-                    
-        except httpx.ConnectError:
-            logger.debug("Simulator not reachable. Skipping sync...")
+                            if resp.status_code != 200:
+                                # Simulator didn't return successfully for this specific node
+                                continue
+                                
+                            sim_data = resp.json()
+                            
+                            # Apply updates directly to plant attributes & related records
+                            for s_data in sim_data:
+                                val = s_data["value"]
+                                stype = s_data["type"]
+                                
+                                # Primary Metrics Routing
+                                if stype == "Temperature":
+                                    plant.temperature = val
+                                elif stype == "Humidity":
+                                    plant.humidity = val
+                                elif stype == "Soil_Moisture":
+                                    plant.soil_moisture = val
+                                elif stype == "pH":
+                                    plant.ph = val
+                                elif stype == "Light":
+                                    plant.dli = val
+                                    
+                                # Sync underlying static hardware record if present in DB, or auto-register if new
+                                sensor = db.query(SensorRecord).filter(SensorRecord.id == s_data["id"]).first()
+                                if sensor:
+                                    sensor.current_value = val
+                                    sensor.last_sync = datetime.now(timezone.utc)
+                                    sensor.status = s_data["status"]
+                                else:
+                                    # AUTO-DISCOVERY: Create the physical node reference automatically!
+                                    new_sensor = SensorRecord(
+                                        id=s_data["id"],
+                                        sensor_type=stype,
+                                        model_name="IoT-SimNode",
+                                        battery_level=s_data.get("battery", 100),
+                                        status=s_data["status"],
+                                        active_plant_id=plant.id,
+                                        last_sync=datetime.now(timezone.utc),
+                                        current_value=val
+                                    )
+                                    db.add(new_sensor)
+                            
+                            # Mark updated
+                            db.commit()
+                            
+                        except httpx.RequestError:
+                            # Quietly ignore individual node failures (e.g., connection refused)
+                            pass
+                        except Exception as sub_e:
+                            logger.warning(f"Error syncing plant {plant.id}: {str(sub_e)}")
+                            
         except Exception as e:
-            logger.error(f"Error in IoT Sync: {str(e)}")
+            logger.error(f"Critical failure in parent IoT sync loop: {str(e)}")

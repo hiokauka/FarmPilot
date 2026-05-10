@@ -45,15 +45,27 @@ import asyncio
 from app.models import ActivePlantRecord
 from app.services.agent_engine import run_agent_analysis_core
 
+def _run_threaded_analysis(plant_id: str):
+    """Execute the blocking analytical stack inside a segregated worker thread."""
+    with SessionLocal() as db:
+        plant = db.get(ActivePlantRecord, plant_id)
+        if plant:
+            run_agent_analysis_core(db, plant, is_manual=False)
+
 async def background_analysis_loop():
     while True:
         await asyncio.sleep(10) # Run every 10 seconds
         try:
+            # 1. Snapshot ID population quickly on main thread
             with SessionLocal() as db:
-                plants = db.query(ActivePlantRecord).all()
-                for plant in plants:
-                    print(f"Running periodic background analysis for plant: {plant.custom_label}")
-                    run_agent_analysis_core(db, plant, is_manual=False)
+                plant_ids = [p.id for p in db.query(ActivePlantRecord).all()]
+            
+            # 2. Iterate sequentially, but offload EACH blocking execution to standard thread pools
+            for p_id in plant_ids:
+                # await asyncio.to_thread blocks the local loop progression, 
+                # but FREES UP the actual main async event loop to serve other API requests!
+                await asyncio.to_thread(_run_threaded_analysis, p_id)
+                
         except Exception as e:
             print(f"Background loop error: {e}")
 

@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IoT Sensor Node Simulator</title>
+    <title>IoT Multi-Plant Simulator</title>
     <style>
         :root {
-            --bg: #0f0f13;
-            --card: #16161e;
+            --bg: #09090b;
+            --card: #18181b;
             --accent: #10b981;
-            --text: #e2e8f0;
-            --text-dim: #94a3b8;
+            --text: #f4f4f5;
+            --text-dim: #71717a;
+            --border: #27272a;
         }
         body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
@@ -23,193 +24,190 @@
             min-height: 100vh;
             padding: 2rem;
         }
-        .header {
-            text-align: center;
-            margin-bottom: 3rem;
+        .top-bar {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
         }
-        .header h1 {
+        .branding h1 {
             margin: 0;
-            font-size: 2rem;
-            letter-spacing: -0.025em;
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: #fff;
+        }
+        .branding span {
             color: var(--accent);
         }
-        .header p {
-            color: var(--text-dim);
-            margin-top: 0.5rem;
+        .plant-selector-box {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background: var(--card);
+            padding: 0.5rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+        }
+        select, input {
+            background: transparent;
+            border: none;
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            outline: none;
+            cursor: pointer;
+        }
+        select option {
+            background: var(--bg);
+            color: white;
         }
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1.5rem;
             width: 100%;
             max-width: 1200px;
         }
         .card {
             background: var(--card);
-            border: 1px solid #27272a;
+            border: 1px solid var(--border);
             padding: 1.5rem;
-            border-radius: 1.25rem;
+            border-radius: 1rem;
             position: relative;
-            overflow: hidden;
-            transition: transform 0.2s;
+            transition: all 0.2s;
         }
-        .card:hover {
-            transform: translateY(-4px);
-            border-color: var(--accent);
+        .card.interpolating {
+            border-color: #3b82f6;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.1);
         }
         .card-header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
             margin-bottom: 1rem;
         }
-        .sensor-id {
-            font-family: monospace;
-            font-size: 0.75rem;
-            color: var(--text-dim);
-            background: #1a1a23;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.5rem;
-        }
         .sensor-type {
-            font-weight: bold;
-            font-size: 0.875rem;
+            font-size: 0.75rem;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .value-container {
-            margin: 1.5rem 0;
-        }
-        .value {
-            font-size: 3rem;
             font-weight: 800;
-            margin: 0;
-        }
-        .unit {
-            font-size: 1.25rem;
+            letter-spacing: 0.05em;
             color: var(--text-dim);
-            margin-left: 0.25rem;
         }
+        .badge {
+            font-size: 0.65rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 2rem;
+            font-weight: 600;
+        }
+        .badge-online { background: rgba(16,185,129,0.1); color: #10b981; }
+        .badge-working { background: rgba(59,130,246,0.1); color: #3b82f6; }
+        .value {
+            font-size: 3.5rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin: 1rem 0;
+        }
+        .unit { font-size: 1.2rem; color: var(--text-dim); margin-left: 0.25rem; }
         .footer {
             display: flex;
             justify-content: space-between;
-            font-size: 0.75rem;
-            color: var(--text-dim);
-            border-top: 1px solid #27272a;
-            padding-top: 1rem;
-        }
-        .status-online {
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .status-online::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            background: var(--accent);
-            border-radius: 50%;
-            box-shadow: 0 0 10px var(--accent);
-        }
-        .controls {
-            margin-top: 4rem;
-            display: flex;
-            gap: 1rem;
-        }
-        button {
-            background: #1a1a23;
-            border: 1px solid #27272a;
-            color: var(--text);
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.75rem;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        button:hover {
-            background: #27272a;
-            border-color: var(--accent);
-        }
-        .sync-indicator {
-            position: fixed;
-            top: 1rem;
-            right: 1rem;
             font-size: 0.7rem;
             color: var(--text-dim);
             font-family: monospace;
         }
+        .controls { margin-top: 4rem; display: flex; gap: 1rem; }
+        button {
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover { border-color: var(--accent); }
     </style>
 </head>
 <body>
-    <div class="sync-indicator" id="sync-time">Last Sync: Never</div>
-    
-    <div class="header">
-        <h1>IoT Node Simulator</h1>
-        <p>Broadcasting to FarmPilot Backend... Status: <span id="broadcast-status">PENDING</span></p>
+    <div class="top-bar">
+        <div class="branding">
+            <h1>Multi-Plant <span>SIMULATOR</span></h1>
+        </div>
+        <div class="plant-selector-box">
+            <label style="color: var(--text-dim); font-size: 0.8rem; font-weight: 600;">TARGET NODE:</label>
+            <select id="plant-select" onchange="changePlant()">
+                <option value="ap-1">Lettuce Rack A (ap-1)</option>
+                <option value="ap-2">Strawberry Row B (ap-2)</option>
+                <option value="ap-3">Tomato Greenhouse (ap-3)</option>
+                <option value="ap-4">Basil Hydro (ap-4)</option>
+            </select>
+        </div>
     </div>
 
-    <div class="grid" id="sensor-grid">
-        <!-- Cards will be injected here -->
+    <div class="grid" id="grid">
+        <!-- Generated Injections -->
     </div>
 
     <div class="controls">
-        <button onclick="resetSim()">Hard Reset Simulation</button>
-        <button onclick="toggleDrift()">Toggle Drift (Active)</button>
+        <button onclick="forceReset()">Factory Reset Backend</button>
     </div>
 
     <script>
-        async function updateSensors() {
+        let currentPlant = 'ap-1';
+
+        function changePlant() {
+            currentPlant = document.getElementById('plant-select').value;
+            render();
+        }
+
+        async function render() {
             try {
-                const response = await fetch('/sensors');
-                const data = await response.json();
-                const grid = document.getElementById('sensor-grid');
+                const res = await fetch(`/sensors/${currentPlant}`);
+                if(!res.ok) throw new Error("Offline");
+                const data = await res.json();
+                const grid = document.getElementById('grid');
                 grid.innerHTML = '';
 
                 data.forEach(s => {
+                    const isInterp = s.status === 'Interpolating';
                     const card = document.createElement('div');
-                    card.className = 'card';
+                    card.className = `card ${isInterp ? 'interpolating' : ''}`;
                     card.innerHTML = `
                         <div class="card-header">
                             <span class="sensor-type">${s.type.replace('_', ' ')}</span>
-                            <span class="sensor-id">${s.id}</span>
+                            <span class="badge ${isInterp ? 'badge-working' : 'badge-online'}">
+                                ${isInterp ? 'ADJUSTING' : 'LIVE'}
+                            </span>
                         </div>
-                        <div class="value-container">
-                            <p class="value">${s.value}<span class="unit">${s.unit || ''}</span></p>
-                        </div>
+                        <div class="value">${s.value}<span class="unit">${s.unit}</span></div>
+                        ${isInterp && s.target !== undefined && s.target !== null ? `
+                            <div style="font-size: 0.8rem; font-weight: 700; color: #60a5fa; margin-top: -0.5rem; margin-bottom: 1rem;">
+                                &rarr; TARGETING ${s.target.toFixed(2)}${s.unit}
+                            </div>
+                        ` : ''}
                         <div class="footer">
-                            <span class="status-online">BROADCASTING</span>
-                            <span>BATTERY: ${s.battery}%</span>
+                            <span>${s.id}</span>
+                            <span>BAT: ${s.battery}%</span>
                         </div>
                     `;
                     grid.appendChild(card);
                 });
-
-                document.getElementById('sync-time').innerText = 'Last Sync: ' + new Date().toLocaleTimeString();
-                document.getElementById('broadcast-status').innerText = 'ACTIVE';
-                document.getElementById('broadcast-status').style.color = '#10b981';
             } catch (err) {
-                document.getElementById('broadcast-status').innerText = 'OFFLINE';
-                document.getElementById('broadcast-status').style.color = '#ef4444';
+                console.error(err);
             }
         }
 
-        async function resetSim() {
-            await fetch('/reset', { method: 'POST' });
-            updateSensors();
+        async function forceReset() {
+            await fetch('/reset', {method:'POST'});
+            render();
         }
 
-        let driftEnabled = true;
-        function toggleDrift() {
-            driftEnabled = !driftEnabled;
-            // Note: Currently drift is handled on server-side /sensors call
-            // We'd need to modify server to respect this, but for now it's just visual
-            alert('Drift behavior is currently managed by the server engine.');
-        }
-
-        // Update every 2 seconds
-        setInterval(updateSensors, 2000);
-        updateSensors();
+        setInterval(render, 1500);
+        render();
     </script>
 </body>
 </html>
