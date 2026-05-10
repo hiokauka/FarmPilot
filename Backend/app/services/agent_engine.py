@@ -74,7 +74,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 ),
                 confidence_score=_bounded_confidence(delta, 10),
                 predicted_impact="Reduces water stress and restores stable root uptake within 6-12 hours.",
-                metric_adjustments={"soil_moisture": 5.0}
+                metric_adjustments={"soil_moisture": stage.soil_moisture_optimal}
             )
         )
 
@@ -90,7 +90,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 ),
                 confidence_score=_bounded_confidence(delta, 6),
                 predicted_impact="Improves photosynthesis rate and supports consistent biomass accumulation.",
-                metric_adjustments={"dli": 2.0}
+                metric_adjustments={"dli": stage.dli_optimal}
             )
         )
     elif plant.dli > stage.dli_max:
@@ -105,7 +105,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 ),
                 confidence_score=_bounded_confidence(delta, 6),
                 predicted_impact="Prevents radiative stress, lowers peak tissue temperature and extends lamp longevity.",
-                metric_adjustments={"dli": -2.0}
+                metric_adjustments={"dli": stage.dli_optimal}
             )
         )
 
@@ -122,7 +122,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 ),
                 confidence_score=_bounded_confidence(delta, 4),
                 predicted_impact="Improves transpiration balance and protects quality under current stage conditions.",
-                metric_adjustments={"temperature": -1.5}
+                metric_adjustments={"temperature": stage.temperature_optimal}
             )
         )
     elif plant.temperature < stage.temperature_min:
@@ -134,7 +134,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 reasoning=f"Ambient temp ({plant.temperature}) is below stage critical floor ({stage.temperature_min}).",
                 confidence_score=_bounded_confidence(delta, 3),
                 predicted_impact="Restores internal metabolic efficiency.",
-                metric_adjustments={"temperature": 1.5}
+                metric_adjustments={"temperature": stage.temperature_optimal}
             )
         )
 
@@ -146,7 +146,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 reasoning=f"Humidity ({plant.humidity}%) is significantly above stage safe limit ({stage.humidity_max}%).",
                 confidence_score=85.0,
                 predicted_impact="Reduces microbial risk and controls fungal vector probabilities.",
-                metric_adjustments={"humidity": -5.0}
+                metric_adjustments={"humidity": stage.humidity_optimal}
             )
         )
     elif plant.humidity < stage.humidity_min:
@@ -157,7 +157,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 reasoning=f"Humidity ({plant.humidity}%) is drying below optimal floor.",
                 confidence_score=82.0,
                 predicted_impact="Lowers vapor pressure deficit and prevents stomatal clamping.",
-                metric_adjustments={"humidity": 5.0}
+                metric_adjustments={"humidity": stage.humidity_optimal}
             )
         )
 
@@ -169,7 +169,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 reasoning=f"Solution pH ({plant.ph}) shows elevated acidity below safe bound.",
                 confidence_score=90.0,
                 predicted_impact="Restores nutrient availability.",
-                metric_adjustments={"ph": 0.2}
+                metric_adjustments={"ph": stage.ph_optimal}
             )
         )
     elif plant.ph > stage.ph_max:
@@ -180,7 +180,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 reasoning=f"Solution pH ({plant.ph}) shows excess alkalinity above safe bound.",
                 confidence_score=90.0,
                 predicted_impact="Prevents iron-lockout and promotes trace element mobility.",
-                metric_adjustments={"ph": -0.2}
+                metric_adjustments={"ph": stage.ph_optimal}
             )
         )
 
@@ -367,11 +367,12 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         "Instructions:\n"
         "- If all readings are within safe range and near optimal target: return summary='stable', actions=[], updated_rules=null\n"
         "- If anomalies found or drifting far from target: propose specific corrective actions in 'actions'\n"
-        "- Ensure 'metric_adjustments' are specifically formulated to guide the metric toward the exact 'Optimal Target' center point, to provide maximum future safety buffering.\n"
+        "- CRITICAL RULE: 'metric_adjustments' MUST contain the FINAL ABSOLUTE TARGET VALUE itself (e.g., 70.0). DO NOT return the delta offset (e.g., +5.0). Put the literal target number as the value.\n"
         "- Only populate updated_rules if default thresholds need permanent adjustment\n\n"
         "Return JSON with keys: summary (string), actions (array of objects with keys: "
         "action_title, priority, reasoning, confidence_score, predicted_impact, and optional "
-        "metric_adjustments: object with keys 'dli', 'temperature', 'humidity', 'soil_moisture' holding numerical addition deltas), "
+        "metric_adjustments: object with keys 'dli', 'temperature', 'humidity', 'soil_moisture', 'ph' holding "
+        "ABSOLUTE FINAL TARGET VALUES only - NO DELTAS ALLOWED), "
         "updated_rules (object with optional keys: temperature_min, temperature_max, "
         "soil_moisture_min, soil_moisture_max, target_dli, humidity_min, humidity_max, "
         "ph_min, ph_max — or null if no changes needed)."
@@ -560,27 +561,27 @@ def _apply_action_to_plant(plant: ActivePlantRecord, task: AgentTaskRecord) -> s
         adj = task.metric_adjustments
         
         if 'dli' in adj and adj['dli'] is not None:
-            targ = round(max(0.0, min(40.0, plant.dli + float(adj['dli']))), 2)
+            targ = round(max(0.0, min(40.0, float(adj['dli']))), 2)
             _push_simulator_target(plant.id, "dli", targ)
             applied_targets.append(f"DLI -> {targ}")
             
         if 'temperature' in adj and adj['temperature'] is not None:
-            targ = round(max(5.0, min(50.0, plant.temperature + float(adj['temperature']))), 2)
+            targ = round(max(5.0, min(50.0, float(adj['temperature']))), 2)
             _push_simulator_target(plant.id, "temperature", targ)
             applied_targets.append(f"Temp -> {targ}C")
             
         if 'humidity' in adj and adj['humidity'] is not None:
-            targ = round(max(0.0, min(100.0, plant.humidity + float(adj['humidity']))), 2)
+            targ = round(max(0.0, min(100.0, float(adj['humidity']))), 2)
             _push_simulator_target(plant.id, "humidity", targ)
             applied_targets.append(f"Hum -> {targ}%")
             
         if 'soil_moisture' in adj and adj['soil_moisture'] is not None:
-            targ = round(max(0.0, min(100.0, plant.soil_moisture + float(adj['soil_moisture']))), 2)
+            targ = round(max(0.0, min(100.0, float(adj['soil_moisture']))), 2)
             _push_simulator_target(plant.id, "soil_moisture", targ)
             applied_targets.append(f"Moisture -> {targ}%")
             
         if 'ph' in adj and adj['ph'] is not None:
-            targ = round(max(4.0, min(9.0, plant.ph + float(adj['ph']))), 2)
+            targ = round(max(4.0, min(9.0, float(adj['ph']))), 2)
             _push_simulator_target(plant.id, "ph", targ)
             applied_targets.append(f"pH -> {targ}")
 

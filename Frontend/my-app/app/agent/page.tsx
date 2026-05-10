@@ -163,7 +163,7 @@ export default function AgentDecisions() {
          // Get original value from context safest possible fallback
          const metricDict = activePlant.currentMetrics as Record<string, number>;
          const oldVal = metricDict[mappedKey] ?? 0;
-         const newVal = oldVal + (delta as number);
+         const newVal = Number(delta); // Now interprets absolute targets directly
          
          setExecutingAnim({
             metric: mKey.replace("_", " ").toUpperCase(),
