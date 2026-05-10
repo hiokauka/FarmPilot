@@ -242,97 +242,105 @@ def seed_database(db: Session) -> None:
             current.irrigation_cycle = rules["irrigationCycle"]
             current.target_dli = rules["targetDli"]
 
-    plant = db.get(ActivePlantRecord, "ap-1")
-    if plant is None:
+    # Lettuce Plant (Healthy)
+    plant1 = db.get(ActivePlantRecord, "ap-1")
+    if plant1 is None:
         lettuce = crops["prof-lettuce"]
-        plant = ActivePlantRecord(
+        plant1 = ActivePlantRecord(
             id="ap-1",
-            custom_label="Lettuce Rack A",
+            custom_label="Hydroponic Lettuce A1",
             crop_profile=lettuce,
             status="Growing",
             planted_at=datetime.now(timezone.utc) - timedelta(days=24),
             current_stage="Vegetative",
             day_count=24,
-            health_score=98,
+            health_score=94,
             predicted_yield=1.2,
             location="Zone A, Rack 2",
             temperature=22.5,
-            humidity=65,
+            humidity=62,
             soil_moisture=72,
             ph=6.2,
             dli=14.5,
         )
-        db.add(plant)
+        db.add(plant1)
 
-    if db.get(SensorRecord, "S-104") is None:
-        db.add_all(
-            [
-                SensorRecord(
-                    id="S-104",
-                    sensor_type="Temperature",
-                    model_name="DHT-22 Plus",
-                    battery_level=84,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=22.5,
-                ),
-                SensorRecord(
-                    id="S-105",
-                    sensor_type="Humidity",
-                    model_name="DHT-22 Plus",
-                    battery_level=84,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=65,
-                ),
-                SensorRecord(
-                    id="S-211",
-                    sensor_type="Soil_Moisture",
-                    model_name="Capacitive SM-3",
-                    battery_level=92,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=72,
-                ),
-                SensorRecord(
-                    id="S-305",
-                    sensor_type="pH",
-                    model_name="Bluelab Pulse",
-                    battery_level=45,
-                    status="Warning",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc) - timedelta(minutes=15),
-                    current_value=6.2,
-                ),
-                SensorRecord(
-                    id="S-402",
-                    sensor_type="Light",
-                    model_name="PAR Meter X",
-                    battery_level=100,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=14.5,
-                ),
-            ]
+    # Strawberry Plant (Needs Attention)
+    plant2 = db.get(ActivePlantRecord, "ap-2")
+    if plant2 is None:
+        strawberry = crops["prof-strawberry"]
+        plant2 = ActivePlantRecord(
+            id="ap-2",
+            custom_label="Strawberry Bench B4",
+            crop_profile=strawberry,
+            status="Growing",
+            planted_at=datetime.now(timezone.utc) - timedelta(days=45),
+            current_stage="Flowering",
+            day_count=45,
+            health_score=78,
+            predicted_yield=0.8,
+            location="Zone B, Bench 4",
+            temperature=24.2,  # A bit high for flowering
+            humidity=42,      # A bit low
+            soil_moisture=62,
+            ph=5.6,
+            dli=24.0,
         )
+        db.add(plant2)
 
+    # Tomato Plant (Early Stage)
+    plant3 = db.get(ActivePlantRecord, "ap-3")
+    if plant3 is None:
+        tomato = crops["prof-tomato"]
+        plant3 = ActivePlantRecord(
+            id="ap-3",
+            custom_label="Cherry Tomato C1",
+            crop_profile=tomato,
+            status="Growing",
+            planted_at=datetime.now(timezone.utc) - timedelta(days=12),
+            current_stage="Vegetative",
+            day_count=12,
+            health_score=98,
+            predicted_yield=2.5,
+            location="Zone C, Main Row",
+            temperature=24.0,
+            humidity=65,
+            soil_moisture=70,
+            ph=6.3,
+            dli=25.0,
+        )
+        db.add(plant3)
+
+    # Sensors for Lettuce
+    if db.get(SensorRecord, "S-104") is None:
+        db.add_all([
+            SensorRecord(id="S-104", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=84, status="Online", plant=plant1, last_sync=datetime.now(timezone.utc), current_value=22.5),
+            SensorRecord(id="S-105", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=84, status="Online", plant=plant1, last_sync=datetime.now(timezone.utc), current_value=62.0),
+            SensorRecord(id="S-211", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=92, status="Online", plant=plant1, last_sync=datetime.now(timezone.utc), current_value=72.0),
+        ])
+
+    # Sensors for Strawberry (One with low battery/warning)
+    if db.get(SensorRecord, "S-305") is None:
+        db.add_all([
+            SensorRecord(id="S-305", sensor_type="pH", model_name="Bluelab Pulse", battery_level=12, status="Warning", plant=plant2, last_sync=datetime.now(timezone.utc) - timedelta(hours=2), current_value=5.6),
+            SensorRecord(id="S-402", sensor_type="Light", model_name="PAR Meter X", battery_level=100, status="Online", plant=plant2, last_sync=datetime.now(timezone.utc), current_value=24.0),
+            SensorRecord(id="S-501", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=65, status="Online", plant=plant2, last_sync=datetime.now(timezone.utc), current_value=24.2),
+        ])
+
+    # Task for Strawberry (Risk based)
     task = db.get(AgentTaskRecord, "t-1092")
     if task is None:
         task = AgentTaskRecord(
             id="t-1092",
-            active_plant_id=plant.id,
-            action_title="Increase fertigation frequency by 15%",
+            active_plant_id=plant2.id,
+            action_title="Increase humidity to 55% immediately",
             priority="High",
             reasoning=(
-                "Soil moisture dropped faster than predicted over the last 12h. Current EC indicates nutrient uptake is optimal, "
-                "but water volume is insufficient for the current Vegetative stage of Butterhead Lettuce."
+                "Current humidity (42%) is significantly below the optimal range (50-65%) for Albion Strawberries in the Flowering stage. "
+                "Prolonged low humidity will cause flower abortion and reduced fruit set."
             ),
-            confidence_score=94,
-            predicted_impact="Prevents slight tip burn risk identified in ML model.",
+            confidence_score=98,
+            predicted_impact="Prevents flower drop and ensures target yield of 0.8kg/m2.",
             status="Pending",
             approval_required=True,
         )
@@ -342,10 +350,10 @@ def seed_database(db: Session) -> None:
     if has_notification is None:
         db.add(
             NotificationRecord(
-                active_plant_id=plant.id,
+                active_plant_id=plant2.id,
                 agent_task_id=task.id,
-                title="Agent decision ready",
-                message="The agent recommends increasing fertigation frequency by 15% and is waiting for approval.",
+                title="Critical Humidity Alert",
+                message="Strawberry Bench B4 is at 42% humidity. Agent recommends misting system activation.",
                 channel="in-app",
             )
         )
