@@ -82,7 +82,7 @@ export default function Dashboard() {
             <span className="text-xs px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 font-medium border border-emerald-500/20">Active monitoring</span>
           </div>
           <p className="text-sm text-zinc-300 leading-relaxed">
-            All metrics for {activePlant.customLabel} are within acceptable ranges. Adjusted LED light schedule (+30m) for optimal {activePlant.currentStage.toLowerCase()} growth based on yesterday's DLI calculations.
+            All metrics for {activePlant.customLabel} are within acceptable ranges. Adjusted LED light schedule (+30m) for optimal {activePlant.currentStage.toLowerCase()} growth based on yesterday&apos;s DLI calculations.
           </p>
         </section>
 

@@ -72,11 +72,24 @@ class ActivePlantRecord(Base):
     soil_moisture: Mapped[float] = mapped_column(Float, nullable=False)
     ph: Mapped[float] = mapped_column(Float, nullable=False)
     dli: Mapped[float] = mapped_column(Float, nullable=False)
+    ai_custom_rules: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    last_analysis_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     crop_profile: Mapped[CropProfileRecord] = relationship(back_populates="plants")
+    agent_config: Mapped["AgentConfigRecord | None"] = relationship(back_populates="plant", cascade="all, delete-orphan", uselist=False)
     sensors: Mapped[list["SensorRecord"]] = relationship(back_populates="plant", cascade="all, delete-orphan")
     tasks: Mapped[list["AgentTaskRecord"]] = relationship(back_populates="plant", cascade="all, delete-orphan")
     notifications: Mapped[list["NotificationRecord"]] = relationship(back_populates="plant", cascade="all, delete-orphan")
+
+
+class AgentConfigRecord(Base):
+    __tablename__ = "agent_configs"
+
+    active_plant_id: Mapped[str] = mapped_column(ForeignKey("active_plants.id", ondelete="CASCADE"), primary_key=True)
+    approval_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="ask")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    plant: Mapped[ActivePlantRecord] = relationship(back_populates="agent_config")
 
 
 class SensorRecord(Base):
@@ -108,6 +121,8 @@ class AgentTaskRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    proposed_rules: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metric_adjustments: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     plant: Mapped[ActivePlantRecord] = relationship(back_populates="tasks")
 
@@ -125,3 +140,14 @@ class NotificationRecord(Base):
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     plant: Mapped[ActivePlantRecord] = relationship(back_populates="notifications")
+
+class AnalysisLogRecord(Base):
+    __tablename__ = "analysis_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    active_plant_id: Mapped[str] = mapped_column(ForeignKey("active_plants.id", ondelete="CASCADE"), nullable=False)
+    is_manual: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
