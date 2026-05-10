@@ -334,7 +334,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key or not GENAI_AVAILABLE:
         recs = _generate_recommendations_rule_based(plant, crop, stage)
-        created = materialize_recommendations(db, plant, recs, approval_mode)
+        created = materialize_recommendations(db, plant, recs, approval_mode, pending_metrics)
         plant.last_analysis_at = datetime.now(timezone.utc)
         log = AnalysisLogRecord(
             active_plant_id=plant.id,
@@ -352,6 +352,11 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
 
     rules_context = json.dumps(plant.ai_custom_rules) if plant.ai_custom_rules else "none"
 
+    # Dynamically surface already-adjusting metrics to Gemini so it doesn't redundantly suggest them
+    blocking_note = ""
+    if pending_metrics:
+        blocking_note = f"\nNOTE: The following metrics are ALREADY BEING ADJUSTED and must be IGNORED: {', '.join(sorted(pending_metrics))}.\n"
+
     # Build a clean, concise prompt (no literal curly braces to avoid Gemma issues)
     context_prompt = (
         "You are an expert autonomous agricultural AI agent.\n"
@@ -364,6 +369,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         f"  Humidity: {stage.humidity_min}-{stage.humidity_max}% (Optimal Target: {stage.humidity_optimal}%, Current: {plant.humidity}%)\n"
         f"  pH: {stage.ph_min}-{stage.ph_max} (Optimal Target: {stage.ph_optimal}, Current: {plant.ph})\n"
         f"  Custom AI Rules: {rules_context}\n\n"
+        f"{blocking_note}"
         "Instructions:\n"
         "- If all readings are within safe range and near optimal target: return summary='stable', actions=[], updated_rules=null\n"
         "- If anomalies found or drifting far from target: propose specific corrective actions in 'actions'\n"
@@ -459,7 +465,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
             # utilizing internal physics/rule-based recommendation generation.
             print("  [Agent] Falling back to rule-based safety generator due to API failure...")
             recs = _generate_recommendations_rule_based(plant, crop, stage)
-            created = materialize_recommendations(db, plant, recs, approval_mode)
+            created = materialize_recommendations(db, plant, recs, approval_mode, pending_metrics)
             plant.last_analysis_at = datetime.now(timezone.utc)
             log = AnalysisLogRecord(
                 active_plant_id=plant.id,
@@ -508,7 +514,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
             )
 
         # Trust AI judgment: if it returned no actions (stable), skip materialize
-        created = materialize_recommendations(db, plant, recommendations, approval_mode) if recommendations else []
+        created = materialize_recommendations(db, plant, recommendations, approval_mode, pending_metrics) if recommendations else []
             
         plant.last_analysis_at = datetime.now(timezone.utc)
         log = AnalysisLogRecord(
@@ -526,7 +532,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         print(f"Agent Engine AI error for plant {plant.id}: {type(e).__name__}: {e}")
         traceback.print_exc()
         recs = _generate_recommendations_rule_based(plant, crop, stage)
-        created = materialize_recommendations(db, plant, recs, approval_mode)
+        created = materialize_recommendations(db, plant, recs, approval_mode, pending_metrics)
         plant.last_analysis_at = datetime.now(timezone.utc)
         log = AnalysisLogRecord(
             active_plant_id=plant.id,
@@ -639,6 +645,7 @@ def materialize_recommendations(
     plant: ActivePlantRecord,
     recommendations: list[Recommendation],
     approval_mode: str,
+    blocked_metrics: set[str] = None  # Pass inherited blockers (interpolating sensors + active queue)
 ) -> list[AgentTaskRecord]:
     # Gather details on what's already queued to prevent infinite spam
     pending_tasks = db.scalars(
@@ -649,7 +656,9 @@ def materialize_recommendations(
     ).all()
 
     existing_pending_titles = {t.action_title for t in pending_tasks}
-    existing_pending_metrics = set()
+    existing_pending_metrics = set(blocked_metrics) if blocked_metrics else set()
+    
+    # Also locally guarantee we check whatever might have entered DB in the last 50ms gap
     for t in pending_tasks:
         if t.metric_adjustments:
             existing_pending_metrics.update(t.metric_adjustments.keys())
@@ -663,11 +672,11 @@ def materialize_recommendations(
             continue
         
         # 2. PHYSICAL METRIC BLOCKING: If this rec targets a metric that's already being solved, SKIP.
-        # (unless in auto mode where overlapping is fine, though safety prefers suppression even then)
+        # This prevents double-generating tasks for fields that are already Interpolating!
         if rec.metric_adjustments:
             targeted_keys = set(rec.metric_adjustments.keys())
             if targeted_keys.intersection(existing_pending_metrics):
-                # Metric is already actively being tuned/addressed in pending state
+                # Metric is already actively being tuned/addressed in pending state or active interpolation
                 continue
 
         is_auto = approval_mode == "auto"
