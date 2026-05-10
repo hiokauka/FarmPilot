@@ -18,10 +18,11 @@ export default function Sensors() {
   }
 
   const sensors = [
-    { id: "S-104", type: "Air Temp/Humidity", model: "DHT-22 Plus", battery: 84, status: "online", lastSync: "Just now", value: `${activePlant.metrics.temp.current}°C / ${activePlant.metrics.humidity.current}%` },
-    { id: "S-211", type: "Soil Moisture", model: "Capacitive SM-3", battery: 92, status: "online", lastSync: "2 min ago", value: `${activePlant.metrics.soilMoisture.current}%` },
-    { id: "S-305", type: "Soil pH / EC", model: "Bluelab Pulse", battery: 45, status: "warning", lastSync: "15 min ago", value: `pH ${activePlant.metrics.ph.current}` },
-    { id: "S-402", type: "Light Sensor", model: "PAR Meter X", battery: 100, status: "online", lastSync: "Just now", value: `${activePlant.metrics.light.current} lux` },
+    { id: "S-104", type: "Temperature", model: "DHT-22 Plus", battery: 84, status: "online", lastSync: "Just now", value: `${activePlant.currentMetrics.temperature}°C` },
+    { id: "S-105", type: "Humidity", model: "DHT-22 Plus", battery: 84, status: "online", lastSync: "Just now", value: `${activePlant.currentMetrics.humidity}%` },
+    { id: "S-211", type: "Soil_Moisture", model: "Capacitive SM-3", battery: 92, status: "online", lastSync: "2 min ago", value: `${activePlant.currentMetrics.soilMoisture}%` },
+    { id: "S-305", type: "pH", model: "Bluelab Pulse", battery: 45, status: "warning", lastSync: "15 min ago", value: `pH ${activePlant.currentMetrics.ph}` },
+    { id: "S-402", type: "Light", model: "PAR Meter X", battery: 100, status: "online", lastSync: "Just now", value: `DLI ${activePlant.currentMetrics.dli}` },
   ];
 
   return (
@@ -33,7 +34,7 @@ export default function Sensors() {
         <div className="flex justify-between items-end stagger-1">
           <div>
             <h2 className="text-lg font-semibold text-zinc-100">Active Sensors</h2>
-            <p className="text-sm text-zinc-400">Monitoring equipment linked to {activePlant.name}</p>
+            <p className="text-sm text-zinc-400">Monitoring equipment linked to {activePlant.customLabel}</p>
           </div>
           <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
             + Link New Sensor
@@ -49,7 +50,7 @@ export default function Sensors() {
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/></svg>
                   </div>
                   <div>
-                    <div className="font-semibold text-zinc-200">{s.type}</div>
+                    <div className="font-semibold text-zinc-200">{s.type.replace('_', ' ')}</div>
                     <div className="text-xs text-zinc-500">{s.id} · {s.model}</div>
                   </div>
                 </div>

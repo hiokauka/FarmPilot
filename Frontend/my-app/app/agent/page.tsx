@@ -5,10 +5,10 @@ import PlantHeader from "@/components/PlantHeader";
 import { useState } from "react";
 
 export default function AgentDecisions() {
-  const { activePlant } = usePlant();
+  const { activePlant, activeProfile } = usePlant();
   const [approvalMode, setApprovalMode] = useState<"auto" | "ask">("ask");
 
-  if (!activePlant) {
+  if (!activePlant || !activeProfile) {
     return (
       <div className="flex-1 flex flex-col">
         <PlantHeader />
@@ -24,7 +24,7 @@ export default function AgentDecisions() {
       id: "t-1092",
       priority: "high",
       action: "Increase fertigation frequency by 15%",
-      reasoning: `Soil moisture dropped faster than predicted over the last 12h. Current EC indicates nutrient uptake is optimal, but water volume is insufficient for the current ${activePlant.stage} stage.`,
+      reasoning: `Soil moisture dropped faster than predicted over the last 12h. Current EC indicates nutrient uptake is optimal, but water volume is insufficient for the current ${activePlant.currentStage} stage of ${activeProfile.name}.`,
       confidence: 94,
       impact: "Prevents slight tip burn risk identified in ML model.",
       timestamp: "10 mins ago"
@@ -54,7 +54,7 @@ export default function AgentDecisions() {
             </div>
             <div>
               <h2 className="text-sm font-bold text-zinc-100">AgriAgent v3.1 is Active</h2>
-              <p className="text-xs text-zinc-400">Monitoring {activePlant.name} 24/7</p>
+              <p className="text-xs text-zinc-400">Monitoring {activePlant.customLabel} 24/7</p>
             </div>
           </div>
           

@@ -64,15 +64,15 @@ export default function Sidebar() {
               >
                 <div>
                   <div className={`font-medium text-sm ${activePlantId === plant.id ? "text-emerald-400" : "text-zinc-300"}`}>
-                    {plant.name}
+                    {plant.customLabel}
                   </div>
                   <div className="text-xs text-zinc-500 mt-0.5">
-                    {plant.stage} · Day {plant.day}
+                    {plant.currentStage} · Day {plant.dayCount}
                   </div>
                 </div>
                 {/* Health Dot */}
                 <div className={`w-2 h-2 rounded-full ${
-                  plant.health >= 90 ? "bg-emerald-500" : plant.health >= 70 ? "bg-yellow-500" : "bg-red-500"
+                  plant.healthScore >= 90 ? "bg-emerald-500" : plant.healthScore >= 70 ? "bg-yellow-500" : "bg-red-500"
                 }`}></div>
               </button>
             ))}

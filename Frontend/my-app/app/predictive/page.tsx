@@ -17,8 +17,8 @@ export default function Predictive() {
     );
   }
 
-  // ML Risk Mock Data
-  const riskScore = 12; // 0-100
+  // ML Risk Mock Data mapped to new schema
+  const riskScore = 100 - activePlant.healthScore; // Inverse of health score
   const riskFactors = [
     { name: "Powdery Mildew", risk: 8, trend: "down" },
     { name: "Nutrient Lockout", risk: 15, trend: "up" },
@@ -86,7 +86,7 @@ export default function Predictive() {
               <div className="text-center">
                 <svg className="w-8 h-8 text-zinc-600 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                 <p className="text-sm text-zinc-500">Historical growth chart renders here.</p>
-                <p className="text-xs text-zinc-600 mt-1">Expected harvest yield: 1.2kg per sq/m</p>
+                <p className="text-xs text-zinc-600 mt-1">Expected harvest yield: {activePlant.predictedYield}kg per sq/m</p>
               </div>
            </div>
         </div>

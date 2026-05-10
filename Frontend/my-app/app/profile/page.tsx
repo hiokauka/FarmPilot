@@ -4,9 +4,9 @@ import { usePlant } from "@/context/PlantContext";
 import PlantHeader from "@/components/PlantHeader";
 
 export default function PlantProfile() {
-  const { activePlant } = usePlant();
+  const { activePlant, activeProfile } = usePlant();
 
-  if (!activePlant) {
+  if (!activePlant || !activeProfile) {
     return (
       <div className="flex-1 flex flex-col">
         <PlantHeader />
@@ -17,11 +17,16 @@ export default function PlantProfile() {
     );
   }
 
+  const currentStageProfile = activeProfile.stages.find(s => s.name === activePlant.currentStage) || activeProfile.stages[0];
+  const optimal = currentStageProfile.optimalMetrics;
+  const current = activePlant.currentMetrics;
+
   const optimalRanges = [
-    { label: "Temperature", min: activePlant.metrics.temp.min, max: activePlant.metrics.temp.max, unit: "°C", current: activePlant.metrics.temp.current },
-    { label: "Humidity", min: activePlant.metrics.humidity.min, max: activePlant.metrics.humidity.max, unit: "%", current: activePlant.metrics.humidity.current },
-    { label: "Soil Moisture", min: activePlant.metrics.soilMoisture.min, max: activePlant.metrics.soilMoisture.max, unit: "%", current: activePlant.metrics.soilMoisture.current },
-    { label: "Soil pH", min: activePlant.metrics.ph.min, max: activePlant.metrics.ph.max, unit: "", current: activePlant.metrics.ph.current },
+    { label: "Temperature", min: optimal.temperature.min, max: optimal.temperature.max, unit: "°C", current: current.temperature },
+    { label: "Humidity", min: optimal.humidity.min, max: optimal.humidity.max, unit: "%", current: current.humidity },
+    { label: "Soil Moisture", min: optimal.soilMoisture.min, max: optimal.soilMoisture.max, unit: "%", current: current.soilMoisture },
+    { label: "Soil pH", min: optimal.ph.min, max: optimal.ph.max, unit: "", current: current.ph },
+    { label: "Light DLI", min: optimal.dli.min, max: optimal.dli.max, unit: " mol/m²/d", current: current.dli },
   ];
 
   return (
@@ -34,7 +39,7 @@ export default function PlantProfile() {
           <div className="flex justify-between items-start mb-8">
             <div>
               <h2 className="text-xl font-semibold text-zinc-100 mb-1">Optimal Growth Parameters</h2>
-              <p className="text-sm text-zinc-400">Target ranges for {activePlant.type} during {activePlant.stage} stage.</p>
+              <p className="text-sm text-zinc-400">Target ranges for {activeProfile.name} during {activePlant.currentStage} stage.</p>
             </div>
             <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
               Edit Parameters
@@ -60,12 +65,12 @@ export default function PlantProfile() {
                     {/* Optimal Range Highlight */}
                     <div 
                       className="absolute top-0 bottom-0 bg-emerald-500/20 border-x border-emerald-500/50"
-                      style={{ left: `${minPos}%`, width: `${maxPos - minPos}%` }}
+                      style={{ left: `${Math.max(0, minPos)}%`, width: `${maxPos - minPos}%` }}
                     ></div>
                     {/* Current Value Marker */}
                     <div 
                       className="absolute top-0 bottom-0 w-1.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] z-10"
-                      style={{ left: `calc(${currentPos}% - 3px)` }}
+                      style={{ left: `calc(${Math.min(100, Math.max(0, currentPos))}% - 3px)` }}
                     ></div>
                   </div>
                 </div>
@@ -77,10 +82,11 @@ export default function PlantProfile() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 stagger-2">
           <div className="glass-card p-6 rounded-2xl">
             <h3 className="text-sm font-semibold text-zinc-200 mb-4 tracking-wide uppercase">AI Cultivation Notes</h3>
-            <div className="space-y-4 text-sm text-zinc-400">
-              <p>For {activePlant.type}, maintaining DLI (Daily Light Integral) between 12-14 mol/m²/d is critical during the vegetative phase to prevent leggy growth.</p>
-              <p>Recent observations show slight edge curl on lower leaves. Recommend dropping nighttime temperature by 1°C.</p>
-            </div>
+            <ul className="space-y-4 text-sm text-zinc-400 list-disc pl-4">
+              {currentStageProfile.aiCultivationNotes.map((note, idx) => (
+                 <li key={idx}>{note}</li>
+              ))}
+            </ul>
           </div>
           
           <div className="glass-card p-6 rounded-2xl">
@@ -91,8 +97,8 @@ export default function PlantProfile() {
                 <span className="text-emerald-400 font-medium">Every 4 hours (15m)</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-zinc-800/50 rounded-lg text-sm text-zinc-300">
-                <span>Light Schedule</span>
-                <span className="text-emerald-400 font-medium">{activePlant.metrics.light.hours}h ON / {24 - activePlant.metrics.light.hours}h OFF</span>
+                <span>Target DLI</span>
+                <span className="text-emerald-400 font-medium">{optimal.dli.optimal} mol/m²/d</span>
               </div>
             </div>
           </div>
