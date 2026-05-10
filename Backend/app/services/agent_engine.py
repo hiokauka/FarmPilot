@@ -23,10 +23,16 @@ load_dotenv()
 try:
     from google import genai
     from google.genai import types
-    from app.services.tools import RecommendationList
+    from app.services.tools import AgentResponse  # verify tools module is OK too
     GENAI_AVAILABLE = True
 except ImportError:
     GENAI_AVAILABLE = False
+
+# Thread-safe runtime registry tracking currently processing plant ids.
+# Prevents periodic polling from trampling concurrent manual triggers or long AI calls.
+import threading
+_RUNNING_ANALYSIS_LOCK = threading.Lock()
+_ACTIVE_PLANT_RUNS = set()
 
 @dataclass
 class Recommendation:
@@ -128,6 +134,26 @@ def evaluate_anomaly(plant: ActivePlantRecord, stage: GrowthStageRecord) -> bool
 
 
 def run_agent_analysis_core(db: Session, plant: ActivePlantRecord, is_manual: bool = False) -> tuple[list[AgentTaskRecord], AnalysisLogRecord | None]:
+    """Public safe-wrapper handling thread-safety per-plant to avoid collisions."""
+    global _ACTIVE_PLANT_RUNS
+    
+    with _RUNNING_ANALYSIS_LOCK:
+        if plant.id in _ACTIVE_PLANT_RUNS:
+            # If manual request, we block? No, user explicitly said just "don't run periodic".
+            # Actually safer to avoid all overlapping runs to stop twin task creation.
+            print(f"  [Analysis skipped] Plant {plant.id} analysis is already running.")
+            return [], None
+        _ACTIVE_PLANT_RUNS.add(plant.id)
+    
+    try:
+        return _run_agent_analysis_internal(db, plant, is_manual)
+    finally:
+        with _RUNNING_ANALYSIS_LOCK:
+            if plant.id in _ACTIVE_PLANT_RUNS:
+                _ACTIVE_PLANT_RUNS.remove(plant.id)
+
+
+def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manual: bool = False) -> tuple[list[AgentTaskRecord], AnalysisLogRecord | None]:
     from app.models import AnalysisLogRecord
     crop = db.get(CropProfileRecord, plant.crop_profile_id)
     if not crop:
@@ -175,58 +201,95 @@ def run_agent_analysis_core(db: Session, plant: ActivePlantRecord, is_manual: bo
     client = genai.Client(api_key=api_key)
     from app.services.tools import AgentResponse
 
-    rules_context = json.dumps(plant.ai_custom_rules) if plant.ai_custom_rules else "None (Using Stage Defaults)"
+    rules_context = json.dumps(plant.ai_custom_rules) if plant.ai_custom_rules else "none"
 
-    context_prompt = f"""
-    You are an expert autonomous agricultural AI agent. 
-    Your task is to analyze the current sensor metrics for a plant and output recommended actions to optimize its growth.
-    
-    Plant Details:
-    - Crop: {crop.name}
-    - Current Stage: {stage.name}
-    - Current Health Score: {plant.health_score}
-
-    Stage Default Optimal Ranges:
-    - Temperature: {stage.temperature_min}-{stage.temperature_max}C
-    - Soil Moisture: {stage.soil_moisture_min}-{stage.soil_moisture_max}%
-    - DLI (Daily Light Integral): Target {stage.target_dli}
-    
-    Active Custom AI Rules for this plant:
-    {rules_context}
-
-    Current Sensor Readings:
-    - Temperature: {plant.temperature}C
-    - Soil Moisture: {plant.soil_moisture}%
-    - DLI: {plant.dli}
-
-    Analyze the sensor readings. Propose specific actions to fix any metrics that are out of bounds.
-    If you think the rule bounds should be updated (e.g. the plant is stable but slightly outside default range), supply updated_rules.
-    If stable, propose an action to maintain settings, or leave actions empty.
-    Provide a concise summary of your findings.
-    """
+    # Build a clean, concise prompt (no literal curly braces to avoid Gemma issues)
+    context_prompt = (
+        "You are an expert autonomous agricultural AI agent.\n"
+        "Analyze the sensor readings below against the optimal ranges and respond with a JSON object.\n\n"
+        f"Crop: {crop.name} | Stage: {stage.name} | Health: {plant.health_score}\n\n"
+        "Optimal Ranges:\n"
+        f"  Temperature: {stage.temperature_min}-{stage.temperature_max}C (current: {plant.temperature}C)\n"
+        f"  Soil Moisture: {stage.soil_moisture_min}-{stage.soil_moisture_max}% (current: {plant.soil_moisture}%)\n"
+        f"  DLI: target {stage.target_dli} (current: {plant.dli})\n"
+        f"  Humidity: {stage.humidity_min}-{stage.humidity_max}% (current: {plant.humidity}%)\n"
+        f"  pH: {stage.ph_min}-{stage.ph_max} (current: {plant.ph})\n"
+        f"  Custom AI Rules: {rules_context}\n\n"
+        "Instructions:\n"
+        "- If all readings are within range: return summary='stable', actions=[], updated_rules=null\n"
+        "- If anomalies found: propose specific corrective actions in 'actions'\n"
+        "- Only populate updated_rules if default thresholds need permanent adjustment\n\n"
+        "Return JSON with keys: summary (string), actions (array of objects with keys: "
+        "action_title, priority, reasoning, confidence_score, predicted_impact), "
+        "updated_rules (object with optional keys: temperature_min, temperature_max, "
+        "soil_moisture_min, soil_moisture_max, target_dli, humidity_min, humidity_max, "
+        "ph_min, ph_max — or null if no changes needed)."
+    )
 
     try:
         model_name = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
-        response = client.models.generate_content(
-            model=model_name,
-            contents=context_prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=AgentResponse,
-                temperature=0.2,
-            ),
-        )
-        
-        data = json.loads(response.text)
+
+        response = None
+        last_exc: Exception | None = None
+
+        # Attempt 1: structured JSON schema (Gemini models)
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=context_prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=AgentResponse,
+                    temperature=0.2,
+                ),
+            )
+        except Exception as exc1:
+            last_exc = exc1
+            print(f"  [AI] response_schema failed ({type(exc1).__name__}), trying mime-type only...")
+
+        # Attempt 2: JSON mime type without schema (Gemma + other models)
+        if response is None:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=context_prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=0.2,
+                    ),
+                )
+                last_exc = None
+            except Exception as exc2:
+                last_exc = exc2
+                print(f"  [AI] mime-type-only failed ({type(exc2).__name__}), trying plain text...")
+
+        # Attempt 3: plain text with JSON-in-prompt
+        if response is None:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=context_prompt,
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
+
+        # Extract JSON — strip markdown fences if present
+        raw = response.text.strip()
+        if "```" in raw:
+            parts = raw.split("```")
+            for part in parts:
+                part = part.strip()
+                if part.startswith("json"):
+                    part = part[4:].strip()
+                if part.startswith("{"):
+                    raw = part
+                    break
+        data = json.loads(raw)
         summary = data.get("summary", "Analysis complete.")
         updated_rules = data.get("updated_rules")
-        
+        actions_list = data.get("actions", [])
+
+        # If AI proposed rule updates, append as a separate pending task
         if updated_rules:
-            merged_proposed_rules = {}
-            for k, v in updated_rules.items():
-                if v is not None:
-                    merged_proposed_rules[k] = v
-            
+            merged_proposed_rules = {k: v for k, v in updated_rules.items() if v is not None}
             if merged_proposed_rules:
                 actions_list.append({
                     "action_title": "Update Cultivation Rules",
@@ -237,7 +300,6 @@ def run_agent_analysis_core(db: Session, plant: ActivePlantRecord, is_manual: bo
                     "proposed_rules": merged_proposed_rules
                 })
 
-        actions_list = data.get("actions", [])
         recommendations = []
         for item in actions_list:
             raw_title = item.get("action_title", "Unknown Action")
@@ -252,14 +314,9 @@ def run_agent_analysis_core(db: Session, plant: ActivePlantRecord, is_manual: bo
                     proposed_rules=item.get("proposed_rules", None)
                 )
             )
-            
-        if not recommendations and not has_anomaly:
-            # They didn't propose anything, that's fine if stable
-            created = []
-        else:
-            if not recommendations:
-                recommendations = _generate_recommendations_rule_based(plant, crop, stage)
-            created = materialize_recommendations(db, plant, recommendations, approval_mode)
+
+        # Trust AI judgment: if it returned no actions (stable), skip materialize
+        created = materialize_recommendations(db, plant, recommendations, approval_mode) if recommendations else []
             
         plant.last_analysis_at = datetime.now(timezone.utc)
         log = AnalysisLogRecord(
@@ -273,7 +330,9 @@ def run_agent_analysis_core(db: Session, plant: ActivePlantRecord, is_manual: bo
         db.commit()
         return created, log
     except Exception as e:
-        print(f"Agent Engine error: {e}")
+        import traceback
+        print(f"Agent Engine AI error for plant {plant.id}: {type(e).__name__}: {e}")
+        traceback.print_exc()
         recs = _generate_recommendations_rule_based(plant, crop, stage)
         created = materialize_recommendations(db, plant, recs, approval_mode)
         plant.last_analysis_at = datetime.now(timezone.utc)

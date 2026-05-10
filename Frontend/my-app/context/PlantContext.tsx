@@ -29,33 +29,60 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
     : null;
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [profilesRes, plantsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/profiles`),
-          fetch(`${API_BASE}/api/plants`),
-        ]);
-        if (!profilesRes.ok || !plantsRes.ok)
-          throw new Error("Failed to load data from API");
-        const profilesJson = await profilesRes.json();
-        const plantsJson = await plantsRes.json();
+    let mounted = true;
 
+    async function loadInitial() {
+      try {
+        const profilesRes = await fetch(`${API_BASE}/api/profiles`);
+        if (!profilesRes.ok) throw new Error("Failed to load profiles");
+        const profilesJson = await profilesRes.json();
+        
         const profilesMap: Record<string, CropKnowledgeProfile> = {};
         for (const p of profilesJson) profilesMap[p.id] = p;
+        
+        if (mounted) setProfiles(profilesMap);
+      } catch (err) {
+        console.error("Error loading profiles:", err);
+      }
+    }
+
+    async function pollPlants() {
+      try {
+        const plantsRes = await fetch(`${API_BASE}/api/plants`);
+        if (!plantsRes.ok) throw new Error("Failed to fetch plants");
+        const plantsJson = await plantsRes.json();
 
         const plantsData: ActivePlant[] = plantsJson.map((pl: { plantedAt: string; [key: string]: unknown }) => ({
           ...pl,
           plantedAt: new Date(pl.plantedAt),
         }));
 
-        setProfiles(profilesMap);
-        setPlants(plantsData);
-        if (plantsData.length) setActivePlantId((id) => id ?? plantsData[0].id);
+        if (!mounted) return;
+        
+        setPlants((prevPlants) => {
+          // Optional optimization: only set if changed, but simple replacement is fine for demo poll rate
+          return plantsData;
+        });
+
+        setActivePlantId((currentId) => {
+          if (!currentId && plantsData.length > 0) return plantsData[0].id;
+          return currentId;
+        });
       } catch (err) {
-        console.error("Error loading plants/profiles:", err);
+        console.error("Failed to poll plants:", err);
       }
     }
-    load();
+
+    loadInitial().then(() => {
+      pollPlants(); // Initial fetch
+    });
+
+    const interval = setInterval(pollPlants, 5000); // Poll every 5s
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const addPlant = (name: string, type: string) => {

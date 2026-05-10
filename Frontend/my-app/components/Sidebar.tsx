@@ -6,27 +6,41 @@ import { useState, useEffect } from "react";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
 function PlantStatusDot({ plantId, attentionNeeded }: { plantId: string; attentionNeeded?: boolean }) {
-  const [status, setStatus] = useState<"attention" | "offline" | "online">("online");
+  const [sensorStatus, setSensorStatus] = useState<"offline" | "online">("online");
 
   useEffect(() => {
-    if (attentionNeeded) {
-      setStatus("attention");
-      return;
-    }
+    let mounted = true;
+    // If high priority flag already active, we can skip network fetch overhead
+    if (attentionNeeded) return;
+
     fetch(`${API_BASE}/api/plants/${plantId}/sensors`)
-      .then(res => res.json())
-      .then((sensors: { status: string }[]) => {
-        if (!Array.isArray(sensors) || sensors.length === 0) { setStatus("online"); return; }
-        const hasOffline = sensors.some(s => s.status === "Offline");
-        setStatus(hasOffline ? "offline" : "online");
+      .then(res => {
+        if (!res.ok) return [];
+        return res.json();
       })
-      .catch(() => setStatus("offline"));
+      .then((sensors: { status: string }[]) => {
+        if (!mounted) return;
+        if (!Array.isArray(sensors) || sensors.length === 0) { 
+          setSensorStatus("online"); 
+          return; 
+        }
+        const hasOffline = sensors.some(s => s.status === "Offline");
+        setSensorStatus(hasOffline ? "offline" : "online");
+      })
+      .catch(() => {
+        if (mounted) setSensorStatus("offline");
+      });
+
+    return () => { mounted = false; };
   }, [plantId, attentionNeeded]);
 
+  // Derive status dynamically: Attention > Sensor State
+  const finalStatus = attentionNeeded ? "attention" : sensorStatus;
+
   const dotClass =
-    status === "attention" ? "bg-yellow-500 animate-pulse" :
-    status === "offline"   ? "bg-red-500" :
-                             "bg-emerald-500";
+    finalStatus === "attention" ? "bg-yellow-500 animate-pulse" :
+    finalStatus === "offline"   ? "bg-red-500" :
+                                 "bg-emerald-500";
 
   return <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`} />;
 }

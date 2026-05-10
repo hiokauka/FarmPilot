@@ -4,19 +4,23 @@ import { usePlant } from "@/context/PlantContext";
 import PlantHeader from "@/components/PlantHeader";
 import { AgentActivityEvent, AgentTask } from "@/lib/schema";
 import { useEffect, useMemo, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
-function toRelativeTime(iso: string | undefined): string {
+/** Ensure a bare ISO string (no Z) from the backend is treated as UTC */
+function toUtcDate(iso: string | undefined | null): Date | null {
+  if (!iso) return null;
+  // Append Z if the string has no timezone indicator
+  const normalized = /[Zz+]|\d{2}:\d{2}$/.test(iso) ? iso : iso + "Z";
+  return new Date(normalized);
+}
+
+function toRelativeTime(iso: string | Date | undefined | null): string {
   if (!iso) return "just now";
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(ms / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min${mins > 1 ? "s" : ""} ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
-  const days = Math.floor(hours / 24);
-  return `${days} day${days > 1 ? "s" : ""} ago`;
+  const d = typeof iso === "string" ? toUtcDate(iso) : iso;
+  if (!d || isNaN(d.getTime())) return "just now";
+  return formatDistanceToNow(d, { addSuffix: true, includeSeconds: true });
 }
 
 export default function AgentDecisions() {
@@ -34,8 +38,8 @@ export default function AgentDecisions() {
     [tasks],
   );
 
-  async function loadAgentState(plantId: string) {
-    setLoading(true);
+  async function loadAgentState(plantId: string, showLoader = false) {
+    if (showLoader) setLoading(true);
     try {
       const [configRes, tasksRes, activityRes] = await Promise.all([
         fetch(`${API_BASE}/api/plants/${plantId}/agent/config`),
@@ -43,9 +47,7 @@ export default function AgentDecisions() {
         fetch(`${API_BASE}/api/plants/${plantId}/agent/activity?limit=20`),
       ]);
 
-      if (!configRes.ok || !tasksRes.ok || !activityRes.ok) {
-        throw new Error("Failed to load agent data");
-      }
+      if (!configRes.ok || !tasksRes.ok || !activityRes.ok) return;
 
       const configJson = await configRes.json();
       const tasksJson = await tasksRes.json();
@@ -54,28 +56,47 @@ export default function AgentDecisions() {
       setApprovalMode(configJson.approvalMode === "auto" ? "auto" : "ask");
       const pending = tasksJson.map((t: { createdAt: string; executedAt?: string; [key: string]: unknown }) => ({
         ...t,
-        createdAt: new Date(t.createdAt),
-        executedAt: t.executedAt ? new Date(t.executedAt) : undefined,
+        createdAt: toUtcDate(t.createdAt) ?? new Date(),
+        executedAt: t.executedAt ? toUtcDate(t.executedAt) : undefined,
       })) as AgentTask[];
       setTasks(pending);
       const events = activityJson.map((e: { timestamp: string; [key: string]: unknown }) => ({
         ...e,
-        timestamp: new Date(e.timestamp),
+        timestamp: toUtcDate(e.timestamp) ?? new Date(),
       })) as AgentActivityEvent[];
       setActivity(events);
     } catch (error) {
-      console.error("Failed to load agent state", error);
+      console.error("Failed to sync agent state", error);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
   }
 
   useEffect(() => {
-    if (!activePlant) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAgentState(activePlant.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePlant]);
+    if (!activePlant?.id) return;
+
+    let mounted = true;
+    const pid = activePlant.id;
+
+    const sync = async (showLoader: boolean) => {
+      if (!mounted) return;
+      await loadAgentState(pid, showLoader);
+    };
+
+    // Initialize asynchronously to prevent synchronous setState during hook installation phase
+    setTimeout(() => {
+      sync(true);
+    }, 0);
+
+    const interval = setInterval(() => {
+      sync(false); // Background sync poll
+    }, 3000);
+
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activePlant?.id]);
 
   async function handleModeChange(mode: "ask" | "auto") {
     if (!activePlant || mode === approvalMode) return;
@@ -103,7 +124,7 @@ export default function AgentDecisions() {
         method: "POST",
       });
       if (!res.ok) throw new Error("Failed to run analysis");
-      await loadAgentState(activePlant.id);
+      await loadAgentState(activePlant.id, false); // Don't override full-page running state loader
     } catch (error) {
       console.error(error);
     } finally {
@@ -190,8 +211,8 @@ export default function AgentDecisions() {
                 )}
             </button>
             <span className="text-[10px] text-zinc-500 font-medium">
-              {activity.find(e => e.kind === "analysis") 
-                ? `Last check: ${toRelativeTime(activity.find(e => e.kind === "analysis")?.timestamp.toISOString())}`
+              {activePlant?.lastAnalysisAt 
+                ? `Last check: ${toRelativeTime(activePlant.lastAnalysisAt)}`
                 : "Awaiting first analysis"}
             </span>
           </div>
