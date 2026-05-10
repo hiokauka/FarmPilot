@@ -18,6 +18,10 @@ export interface GrowthStage {
     dli: MetricRange; // Daily Light Integral
   };
   aiCultivationNotes: string[];
+  scheduleRules: {
+    irrigationCycle: string;
+    targetDli: number;
+  };
 }
 
 export interface CropKnowledgeProfile {

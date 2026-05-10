@@ -39,7 +39,10 @@ export default function PlantProfile() {
           <div className="flex justify-between items-start mb-8">
             <div>
               <h2 className="text-xl font-semibold text-zinc-100 mb-1">Optimal Growth Parameters</h2>
-              <p className="text-sm text-zinc-400">Target ranges for {activeProfile.name} during {activePlant.currentStage} stage.</p>
+              <p className="text-sm text-zinc-400">
+                Target ranges for <span className="text-emerald-400 italic">{activeProfile.scientificName}</span> ({activeProfile.name}) during {activePlant.currentStage} stage. 
+                Est. Lifespan: {activeProfile.expectedLifespanDays} days.
+              </p>
             </div>
             <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
               Edit Parameters
@@ -94,11 +97,11 @@ export default function PlantProfile() {
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-zinc-800/50 rounded-lg text-sm text-zinc-300">
                 <span>Irrigation Cycle</span>
-                <span className="text-emerald-400 font-medium">Every 4 hours (15m)</span>
+                <span className="text-emerald-400 font-medium">{currentStageProfile.scheduleRules.irrigationCycle}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-zinc-800/50 rounded-lg text-sm text-zinc-300">
                 <span>Target DLI</span>
-                <span className="text-emerald-400 font-medium">{optimal.dli.optimal} mol/m²/d</span>
+                <span className="text-emerald-400 font-medium">{currentStageProfile.scheduleRules.targetDli} mol/m²/d</span>
               </div>
             </div>
           </div>
