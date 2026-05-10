@@ -12,8 +12,15 @@ FarmPilot is split into two apps:
 
 ## 1. Start the backend
 
-Open a terminal in `Backend/` and run these Bash commands:
+Open a terminal in `Backend/`.
 
+First, set up your environment variables for the Agentic AI:
+```bash
+cp .env.example .env
+# Edit .env and add your GEMINI_API_KEY (and change LLM_MODEL if desired)
+```
+
+Then install dependencies and start the server:
 ```bash
 python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload

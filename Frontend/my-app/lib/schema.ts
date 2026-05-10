@@ -52,6 +52,9 @@ export interface ActivePlant {
     ph: number;
     dli: number;
   };
+  aiCustomRules?: Record<string, unknown>;
+  lastAnalysisAt?: string;
+  attentionNeeded?: boolean;
 }
 
 export interface Sensor {
@@ -76,4 +79,20 @@ export interface AgentTask {
   status: "Pending" | "Auto-Approved" | "Manually-Approved" | "Rejected";
   createdAt: Date;
   executedAt?: Date;
+  approvalRequired?: boolean;
+  proposedRules?: Record<string, unknown>;
+  metricAdjustments?: Record<string, number>;
+}
+
+export interface AgentConfig {
+  activePlantId: string;
+  approvalMode: "ask" | "auto";
+  updatedAt: Date;
+}
+
+export interface AgentActivityEvent {
+  kind: "task" | "notification" | "analysis";
+  timestamp: Date;
+  title: string;
+  detail: string;
 }
