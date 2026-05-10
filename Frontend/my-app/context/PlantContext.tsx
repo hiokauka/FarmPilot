@@ -43,7 +43,7 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
         const profilesMap: Record<string, CropKnowledgeProfile> = {};
         for (const p of profilesJson) profilesMap[p.id] = p;
 
-        const plantsData: ActivePlant[] = plantsJson.map((pl: any) => ({
+        const plantsData: ActivePlant[] = plantsJson.map((pl: { plantedAt: string; [key: string]: unknown }) => ({
           ...pl,
           plantedAt: new Date(pl.plantedAt),
         }));

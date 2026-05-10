@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePlant } from "@/context/PlantContext";
@@ -7,6 +8,24 @@ import { usePlant } from "@/context/PlantContext";
 export default function PlantHeader({ title }: { title?: string }) {
   const pathname = usePathname();
   const { activePlant, activeProfile } = usePlant();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (activePlant) {
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+      fetch(`${apiBase}/api/plants/${activePlant.id}/agent/tasks`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setPendingCount(data.length);
+          }
+        })
+        .catch(err => console.error("Failed to fetch tasks for header", err));
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPendingCount(0);
+    }
+  }, [activePlant]);
 
   const navItems = [
     { name: "Dashboard", path: "/" },
@@ -51,17 +70,19 @@ export default function PlantHeader({ title }: { title?: string }) {
         </div>
       </div>
 
-      {/* Quick Status Badges */}
-      <div className="flex gap-3">
-        {activePlant.healthScore < 100 && (
-          <div className="px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse"></div>
-            <span className="text-xs font-medium text-yellow-500">Attention Needed</span>
-          </div>
-        )}
-        <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-          <span className="text-xs font-medium text-emerald-400">Sensors Online</span>
+      {/* System Status Legend */}
+      <div className="flex gap-4 items-center">
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+          <span className="text-[11px] text-zinc-500">Attention needed</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-red-500" />
+          <span className="text-[11px] text-zinc-500">Sensor offline</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-2 h-2 rounded-full bg-emerald-500" />
+          <span className="text-[11px] text-zinc-500">All systems online</span>
         </div>
       </div>
       </div>

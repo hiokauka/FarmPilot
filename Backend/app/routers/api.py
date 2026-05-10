@@ -5,13 +5,19 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import (
     ActivePlantRecord,
+    AgentConfigRecord,
+    AgentTaskRecord,
     CropProfileRecord,
+    NotificationRecord,
+    AnalysisLogRecord,
 )
+from app.services.agent_engine import apply_manual_decision, materialize_recommendations
 
 router = APIRouter(prefix="/api")
 
@@ -19,6 +25,16 @@ router = APIRouter(prefix="/api")
 class CreatePlantPayload(BaseModel):
     customLabel: str
     cropProfileId: str
+
+
+class UpdateAgentModePayload(BaseModel):
+    approvalMode: str
+
+
+class TaskDecisionPayload(BaseModel):
+    decision: str
+    modifiedActionTitle: str | None = None
+    modifiedImpact: str | None = None
 
 
 def plant_to_dict(p: ActivePlantRecord) -> dict:
@@ -40,6 +56,9 @@ def plant_to_dict(p: ActivePlantRecord) -> dict:
             "ph": p.ph,
             "dli": p.dli,
         },
+        "aiCustomRules": p.ai_custom_rules,
+        "lastAnalysisAt": p.last_analysis_at.isoformat() if p.last_analysis_at else None,
+        "attentionNeeded": len([t for t in getattr(p, "tasks", []) if t.status == "Pending"]) > 0,
     }
 
 
@@ -66,6 +85,23 @@ def profile_to_dict(c: CropProfileRecord) -> dict:
             }
             for s in c.stages
         ],
+    }
+
+
+def task_to_dict(t: AgentTaskRecord) -> dict:
+    return {
+        "id": t.id,
+        "activePlantId": t.active_plant_id,
+        "actionTitle": t.action_title,
+        "priority": t.priority,
+        "reasoning": t.reasoning,
+        "confidenceScore": t.confidence_score,
+        "predictedImpact": t.predicted_impact,
+        "status": t.status,
+        "createdAt": t.created_at.isoformat(),
+        "executedAt": t.executed_at.isoformat() if t.executed_at else None,
+        "approvalRequired": t.approval_required,
+        "proposedRules": t.proposed_rules,
     }
 
 
@@ -117,6 +153,169 @@ def create_plant(payload: CreatePlantPayload, db: Session = Depends(get_db)):
         dli=first_stage.dli_optimal,
     )
     db.add(plant)
+    db.add(AgentConfigRecord(active_plant_id=plant.id, approval_mode="ask"))
     db.commit()
     db.refresh(plant)
     return plant_to_dict(plant)
+
+
+@router.get("/plants/{plant_id}/agent/config")
+def get_agent_config(plant_id: str, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    config = db.get(AgentConfigRecord, plant_id)
+    if config is None:
+        config = AgentConfigRecord(active_plant_id=plant_id, approval_mode="ask")
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+
+    return {
+        "activePlantId": config.active_plant_id,
+        "approvalMode": config.approval_mode,
+        "updatedAt": config.updated_at.isoformat(),
+    }
+
+
+@router.put("/plants/{plant_id}/agent/config")
+def update_agent_config(plant_id: str, payload: UpdateAgentModePayload, db: Session = Depends(get_db)):
+    if payload.approvalMode not in {"ask", "auto"}:
+        raise HTTPException(status_code=400, detail="approvalMode must be 'ask' or 'auto'")
+
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    config = db.get(AgentConfigRecord, plant_id)
+    if config is None:
+        config = AgentConfigRecord(active_plant_id=plant_id)
+
+    config.approval_mode = payload.approvalMode
+    config.updated_at = datetime.utcnow()
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+
+    return {
+        "activePlantId": config.active_plant_id,
+        "approvalMode": config.approval_mode,
+        "updatedAt": config.updated_at.isoformat(),
+    }
+
+
+@router.get("/plants/{plant_id}/agent/tasks")
+def list_agent_tasks(plant_id: str, includeResolved: bool = True, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    query = select(AgentTaskRecord).where(AgentTaskRecord.active_plant_id == plant_id)
+    if not includeResolved:
+        query = query.where(AgentTaskRecord.status == "Pending")
+    tasks = db.scalars(query.order_by(desc(AgentTaskRecord.created_at))).all()
+    return [task_to_dict(t) for t in tasks]
+
+
+@router.get("/plants/{plant_id}/agent/activity")
+def list_agent_activity(plant_id: str, limit: int = 20, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    task_rows = db.scalars(
+        select(AgentTaskRecord)
+        .where(AgentTaskRecord.active_plant_id == plant_id)
+        .order_by(desc(AgentTaskRecord.created_at))
+        .limit(limit)
+    ).all()
+    notification_rows = db.scalars(
+        select(NotificationRecord)
+        .where(NotificationRecord.active_plant_id == plant_id)
+        .order_by(desc(NotificationRecord.sent_at))
+        .limit(limit)
+    ).all()
+    analysis_log_rows = db.scalars(
+        select(AnalysisLogRecord)
+        .where(AnalysisLogRecord.active_plant_id == plant_id, AnalysisLogRecord.is_hidden == False)
+        .order_by(desc(AnalysisLogRecord.created_at))
+        .limit(limit)
+    ).all()
+
+    task_events = [
+        {
+            "kind": "task",
+            "timestamp": t.created_at.isoformat(),
+            "title": t.action_title,
+            "detail": f"{t.status} ({t.priority})",
+        }
+        for t in task_rows
+    ]
+    notification_events = [
+        {
+            "kind": "notification",
+            "timestamp": n.sent_at.isoformat(),
+            "title": n.title,
+            "detail": n.message,
+        }
+        for n in notification_rows
+    ]
+    analysis_events = [
+        {
+            "kind": "analysis",
+            "timestamp": a.created_at.isoformat(),
+            "title": f"Analysis: {a.status}",
+            "detail": a.ai_summary or "System check completed.",
+        }
+        for a in analysis_log_rows
+    ]
+
+    events = sorted(task_events + notification_events + analysis_events, key=lambda e: e["timestamp"], reverse=True)
+    return events[:limit]
+
+
+@router.post("/plants/{plant_id}/agent/run")
+def run_agent_analysis(plant_id: str, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+
+    from app.services.agent_engine import run_agent_analysis_core
+    created, log = run_agent_analysis_core(db, plant, is_manual=True)
+
+    config = db.get(AgentConfigRecord, plant_id)
+    approval_mode = config.approval_mode if config else "ask"
+
+    return {
+        "activePlantId": plant_id,
+        "approvalMode": approval_mode,
+        "generatedCount": len(created),
+        "tasks": [task_to_dict(t) for t in created],
+        "summary": log.ai_summary if log else None
+    }
+
+
+@router.patch("/agent/tasks/{task_id}")
+def decide_agent_task(task_id: str, payload: TaskDecisionPayload, db: Session = Depends(get_db)):
+    if payload.decision not in {"approve", "reject", "modify_approve"}:
+        raise HTTPException(status_code=400, detail="decision must be 'approve', 'reject', or 'modify_approve'")
+
+    task = db.get(AgentTaskRecord, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status != "Pending":
+        raise HTTPException(status_code=400, detail="Only Pending tasks can be updated")
+
+    apply_manual_decision(
+        db,
+        task,
+        payload.decision,
+        modified_action_title=payload.modifiedActionTitle,
+        modified_impact=payload.modifiedImpact,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return task_to_dict(task)

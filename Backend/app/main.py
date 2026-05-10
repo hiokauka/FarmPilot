@@ -23,6 +23,22 @@ def _ensure_growth_stage_columns() -> None:
             conn.execute(text("ALTER TABLE growth_stages ADD COLUMN target_dli FLOAT NOT NULL DEFAULT 12"))
 
 
+import asyncio
+from app.models import ActivePlantRecord
+from app.services.agent_engine import run_agent_analysis_core
+
+async def background_analysis_loop():
+    while True:
+        await asyncio.sleep(60) # Run every 60 seconds
+        try:
+            with SessionLocal() as db:
+                plants = db.query(ActivePlantRecord).all()
+                for plant in plants:
+                    print(f"Running periodic background analysis for plant: {plant.custom_label}")
+                    run_agent_analysis_core(db, plant, is_manual=False)
+        except Exception as e:
+            print(f"Background loop error: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -31,7 +47,12 @@ async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         seed_database(db)
 
+    # Start the periodic background loop
+    task = asyncio.create_task(background_analysis_loop())
+
     yield
+
+    task.cancel()
 
 
 app = FastAPI(title="FarmPilot API", version="0.1.0", lifespan=lifespan)
@@ -51,3 +72,5 @@ app.include_router(api_router)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+    
+# Trigger reload for new seed data

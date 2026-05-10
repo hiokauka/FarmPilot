@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import (
     ActivePlantRecord,
+    AgentConfigRecord,
     AgentTaskRecord,
     CropProfileRecord,
     GrowthStageRecord,
@@ -242,95 +243,127 @@ def seed_database(db: Session) -> None:
             current.irrigation_cycle = rules["irrigationCycle"]
             current.target_dli = rules["targetDli"]
 
-    plant = db.get(ActivePlantRecord, "ap-1")
-    if plant is None:
-        lettuce = crops["prof-lettuce"]
-        plant = ActivePlantRecord(
-            id="ap-1",
-            custom_label="Lettuce Rack A",
-            crop_profile=lettuce,
-            status="Growing",
-            planted_at=datetime.now(timezone.utc) - timedelta(days=24),
-            current_stage="Vegetative",
-            day_count=24,
-            health_score=98,
-            predicted_yield=1.2,
-            location="Zone A, Rack 2",
-            temperature=22.5,
-            humidity=65,
-            soil_moisture=72,
-            ph=6.2,
-            dli=14.5,
-        )
-        db.add(plant)
+    plants_data = [
+        {
+            "id": "ap-1",
+            "custom_label": "Lettuce Rack A",
+            "profile_id": "prof-lettuce",
+            "stage": "Vegetative",
+            "day_count": 24,
+            "health_score": 98,
+            "predicted_yield": 1.2,
+            "location": "Zone A, Rack 2",
+            "temperature": 22.5,
+            "humidity": 65,
+            "soil_moisture": 72,
+            "ph": 6.2,
+            "dli": 14.5,
+        },
+        {
+            "id": "ap-2",
+            "custom_label": "Strawberry Row B",
+            "profile_id": "prof-strawberry",
+            "stage": "Flowering",
+            "day_count": 45,
+            "health_score": 92,
+            "predicted_yield": 0.8,
+            "location": "Zone B, Row 1",
+            "temperature": 20.5,
+            "humidity": 60,
+            "soil_moisture": 76,
+            "ph": 5.9,
+            "dli": 22.5,
+        },
+        {
+            "id": "ap-3",
+            "custom_label": "Tomato Greenhouse 1",
+            "profile_id": "prof-tomato",
+            "stage": "Flowering",
+            "day_count": 65,
+            "health_score": 85,
+            "predicted_yield": 4.5,
+            "location": "Greenhouse 1, Row 3",
+            "temperature": 25.0,
+            "humidity": 55,
+            "soil_moisture": 72,
+            "ph": 6.3,
+            "dli": 30.0,
+        },
+        {
+            "id": "ap-4",
+            "custom_label": "Basil Hydroponic Unit",
+            "profile_id": "prof-basil",
+            "stage": "Vegetative",
+            "day_count": 15,
+            "health_score": 99,
+            "predicted_yield": 0.5,
+            "location": "Zone C, Unit 4",
+            "temperature": 24.5,
+            "humidity": 62,
+            "soil_moisture": 75,
+            "ph": 6.4,
+            "dli": 16.0,
+        }
+    ]
+
+    for pdata in plants_data:
+        plant = db.get(ActivePlantRecord, pdata["id"])
+        if plant is None:
+            crop = crops[pdata["profile_id"]]
+            plant = ActivePlantRecord(
+                id=pdata["id"],
+                custom_label=pdata["custom_label"],
+                crop_profile=crop,
+                status="Growing",
+                planted_at=datetime.now(timezone.utc) - timedelta(days=pdata["day_count"]),
+                current_stage=pdata["stage"],
+                day_count=pdata["day_count"],
+                health_score=pdata["health_score"],
+                predicted_yield=pdata["predicted_yield"],
+                location=pdata["location"],
+                temperature=pdata["temperature"],
+                humidity=pdata["humidity"],
+                soil_moisture=pdata["soil_moisture"],
+                ph=pdata["ph"],
+                dli=pdata["dli"],
+            )
+            db.add(plant)
+
+        config = db.get(AgentConfigRecord, plant.id)
+        if config is None:
+            db.add(AgentConfigRecord(active_plant_id=plant.id, approval_mode="ask"))
 
     if db.get(SensorRecord, "S-104") is None:
-        db.add_all(
-            [
-                SensorRecord(
-                    id="S-104",
-                    sensor_type="Temperature",
-                    model_name="DHT-22 Plus",
-                    battery_level=84,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=22.5,
-                ),
-                SensorRecord(
-                    id="S-105",
-                    sensor_type="Humidity",
-                    model_name="DHT-22 Plus",
-                    battery_level=84,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=65,
-                ),
-                SensorRecord(
-                    id="S-211",
-                    sensor_type="Soil_Moisture",
-                    model_name="Capacitive SM-3",
-                    battery_level=92,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=72,
-                ),
-                SensorRecord(
-                    id="S-305",
-                    sensor_type="pH",
-                    model_name="Bluelab Pulse",
-                    battery_level=45,
-                    status="Warning",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc) - timedelta(minutes=15),
-                    current_value=6.2,
-                ),
-                SensorRecord(
-                    id="S-402",
-                    sensor_type="Light",
-                    model_name="PAR Meter X",
-                    battery_level=100,
-                    status="Online",
-                    plant=plant,
-                    last_sync=datetime.now(timezone.utc),
-                    current_value=14.5,
-                ),
-            ]
-        )
+        db.add_all([
+            SensorRecord(id="S-104", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=84, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=22.5),
+            SensorRecord(id="S-105", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=84, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=65),
+            SensorRecord(id="S-211", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=92, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=72),
+            SensorRecord(id="S-305", sensor_type="pH", model_name="Bluelab Pulse", battery_level=45, status="Warning", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc) - timedelta(minutes=15), current_value=6.2),
+            SensorRecord(id="S-402", sensor_type="Light", model_name="PAR Meter X", battery_level=100, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=14.5),
+        ])
+
+    if db.get(SensorRecord, "S-106") is None:
+        db.add_all([
+            SensorRecord(id="S-106", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=90, status="Online", active_plant_id="ap-2", last_sync=datetime.now(timezone.utc), current_value=20.5),
+            SensorRecord(id="S-107", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=90, status="Online", active_plant_id="ap-2", last_sync=datetime.now(timezone.utc), current_value=60),
+            SensorRecord(id="S-212", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=88, status="Online", active_plant_id="ap-2", last_sync=datetime.now(timezone.utc), current_value=76),
+        ])
+
+    if db.get(SensorRecord, "S-108") is None:
+        db.add_all([
+            SensorRecord(id="S-108", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=75, status="Online", active_plant_id="ap-3", last_sync=datetime.now(timezone.utc), current_value=25.0),
+            SensorRecord(id="S-109", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=75, status="Online", active_plant_id="ap-3", last_sync=datetime.now(timezone.utc), current_value=55),
+            SensorRecord(id="S-213", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=60, status="Online", active_plant_id="ap-3", last_sync=datetime.now(timezone.utc), current_value=72),
+        ])
 
     task = db.get(AgentTaskRecord, "t-1092")
     if task is None:
         task = AgentTaskRecord(
             id="t-1092",
-            active_plant_id=plant.id,
+            active_plant_id="ap-1",
             action_title="Increase fertigation frequency by 15%",
             priority="High",
-            reasoning=(
-                "Soil moisture dropped faster than predicted over the last 12h. Current EC indicates nutrient uptake is optimal, "
-                "but water volume is insufficient for the current Vegetative stage of Butterhead Lettuce."
-            ),
+            reasoning="Soil moisture dropped faster than predicted over the last 12h. Current EC indicates nutrient uptake is optimal, but water volume is insufficient for the current Vegetative stage of Butterhead Lettuce.",
             confidence_score=94,
             predicted_impact="Prevents slight tip burn risk identified in ML model.",
             status="Pending",
@@ -338,12 +371,12 @@ def seed_database(db: Session) -> None:
         )
         db.add(task)
 
-    has_notification = db.scalar(select(NotificationRecord.id).where(NotificationRecord.agent_task_id == task.id).limit(1))
+    has_notification = db.scalar(select(NotificationRecord.id).where(NotificationRecord.agent_task_id == "t-1092").limit(1))
     if has_notification is None:
         db.add(
             NotificationRecord(
-                active_plant_id=plant.id,
-                agent_task_id=task.id,
+                active_plant_id="ap-1",
+                agent_task_id="t-1092",
                 title="Agent decision ready",
                 message="The agent recommends increasing fertigation frequency by 15% and is waiting for approval.",
                 channel="in-app",
@@ -351,3 +384,12 @@ def seed_database(db: Session) -> None:
         )
 
     db.commit()
+
+
+if __name__ == "__main__":
+    from app.database import SessionLocal, engine
+    from app.models.entities import Base
+    Base.metadata.create_all(engine)
+    with SessionLocal() as session:
+        seed_database(session)
+    print("Seed complete.")

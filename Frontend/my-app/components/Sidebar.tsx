@@ -1,18 +1,41 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { usePlant } from "@/context/PlantContext";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+
+function PlantStatusDot({ plantId, attentionNeeded }: { plantId: string; attentionNeeded?: boolean }) {
+  const [status, setStatus] = useState<"attention" | "offline" | "online">("online");
+
+  useEffect(() => {
+    if (attentionNeeded) {
+      setStatus("attention");
+      return;
+    }
+    fetch(`${API_BASE}/api/plants/${plantId}/sensors`)
+      .then(res => res.json())
+      .then((sensors: { status: string }[]) => {
+        if (!Array.isArray(sensors) || sensors.length === 0) { setStatus("online"); return; }
+        const hasOffline = sensors.some(s => s.status === "Offline");
+        setStatus(hasOffline ? "offline" : "online");
+      })
+      .catch(() => setStatus("offline"));
+  }, [plantId, attentionNeeded]);
+
+  const dotClass =
+    status === "attention" ? "bg-yellow-500 animate-pulse" :
+    status === "offline"   ? "bg-red-500" :
+                             "bg-emerald-500";
+
+  return <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotClass}`} />;
+}
 
 export default function Sidebar() {
-  const pathname = usePathname();
   const { plants, activePlantId, setActivePlantId, addPlant } = usePlant();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newPlantName, setNewPlantName] = useState("");
   const [newPlantType, setNewPlantType] = useState("Strawberry");
-
-
 
   const handleAddPlant = () => {
     if (newPlantName) {
@@ -62,20 +85,34 @@ export default function Sidebar() {
                     : "bg-zinc-900/50 border border-zinc-800/50 hover:bg-zinc-800 hover:border-zinc-700"
                 }`}
               >
-                <div>
-                  <div className={`font-medium text-sm ${activePlantId === plant.id ? "text-emerald-400" : "text-zinc-300"}`}>
+                <div className="min-w-0 flex-1">
+                  <div className={`font-medium text-sm truncate ${activePlantId === plant.id ? "text-emerald-400" : "text-zinc-300"}`}>
                     {plant.customLabel}
                   </div>
                   <div className="text-xs text-zinc-500 mt-0.5">
                     {plant.currentStage} · Day {plant.dayCount}
                   </div>
                 </div>
-                {/* Health Dot */}
-                <div className={`w-2 h-2 rounded-full ${
-                  plant.healthScore >= 90 ? "bg-emerald-500" : plant.healthScore >= 70 ? "bg-yellow-500" : "bg-red-500"
-                }`}></div>
+                {/* Dynamic Status Dot: attention > offline > online */}
+                <PlantStatusDot plantId={plant.id} attentionNeeded={plant.attentionNeeded} />
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className="px-4 pt-3 pb-2 border-t border-zinc-800/50">
+          <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-2">Status Legend</p>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+              <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" /> Attention needed
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+              <div className="w-2 h-2 rounded-full bg-red-500" /> Sensor offline
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" /> All systems online
+            </div>
           </div>
         </div>
 
