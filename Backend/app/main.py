@@ -13,14 +13,21 @@ from app.seed import seed_database
 
 
 def _ensure_growth_stage_columns() -> None:
-    # Lightweight SQLite-safe migration so local existing DBs get new schedule fields.
+    # Lightweight SQLite-safe migration so local existing DBs get new fields.
     with engine.begin() as conn:
+        # growth_stages table
         rows = conn.execute(text("PRAGMA table_info(growth_stages)")).all()
         existing = {r[1] for r in rows}
         if "irrigation_cycle" not in existing:
             conn.execute(text("ALTER TABLE growth_stages ADD COLUMN irrigation_cycle VARCHAR(80) NOT NULL DEFAULT 'Every 6 hours (5m)'"))
         if "target_dli" not in existing:
             conn.execute(text("ALTER TABLE growth_stages ADD COLUMN target_dli FLOAT NOT NULL DEFAULT 12"))
+
+        # agent_tasks table 
+        rows_tasks = conn.execute(text("PRAGMA table_info(agent_tasks)")).all()
+        existing_tasks = {r[1] for r in rows_tasks}
+        if "metric_adjustments" not in existing_tasks:
+            conn.execute(text("ALTER TABLE agent_tasks ADD COLUMN metric_adjustments JSON NULL"))
 
 
 import asyncio

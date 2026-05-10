@@ -122,6 +122,7 @@ class AgentTaskRecord(Base):
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     proposed_rules: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metric_adjustments: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     plant: Mapped[ActivePlantRecord] = relationship(back_populates="tasks")
 

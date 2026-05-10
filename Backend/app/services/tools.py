@@ -28,6 +28,12 @@ class ProposeActionTool(BaseModel):
         ...,
         description="The expected outcome if this action is applied (e.g., 'Reduces water stress and restores stable root uptake')."
     )
+    metric_adjustments: Optional[dict[str, float]] = Field(
+        default=None,
+        description="Key-value pairs for mechanical adjustments to resolve the issue. "
+                    "Keys MUST be from: ['dli', 'temperature', 'humidity', 'soil_moisture']. "
+                    "Value is the raw numerical delta to ADD (e.g. +2.5 or -5.0) to current levels to reach target."
+    )
 
 class PlantRules(BaseModel):
     """Specific environmental rules customized by the AI for this plant."""

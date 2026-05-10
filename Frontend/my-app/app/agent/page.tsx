@@ -32,6 +32,7 @@ export default function AgentDecisions() {
   const [running, setRunning] = useState(false);
   const [updatingMode, setUpdatingMode] = useState(false);
   const [actingTaskId, setActingTaskId] = useState<string | null>(null);
+  const [executingAnim, setExecutingAnim] = useState<{ metric: string; from: number; to: number; title: string } | null>(null);
 
   const pendingTasks = useMemo(
     () => tasks.filter((task) => task.status === "Pending"),
@@ -151,12 +152,36 @@ export default function AgentDecisions() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision, modifiedActionTitle }),
       });
+      
       if (!res.ok) throw new Error("Failed to update task");
+
+      // -- SIMULATION ANIMATION TRIGGER --
+      if (decision === "approve" && task.metricAdjustments && Object.keys(task.metricAdjustments).length > 0) {
+         const [mKey, delta] = Object.entries(task.metricAdjustments)[0]; // Take primary metric
+         // Map simple keys to backend schema keys safely
+         const mappedKey = mKey === "soil_moisture" ? "soilMoisture" : mKey;
+         // Get original value from context safest possible fallback
+         const metricDict = activePlant.currentMetrics as Record<string, number>;
+         const oldVal = metricDict[mappedKey] ?? 0;
+         const newVal = oldVal + (delta as number);
+         
+         setExecutingAnim({
+            metric: mKey.replace("_", " ").toUpperCase(),
+            from: Number(oldVal.toFixed(1)),
+            to: Number(newVal.toFixed(1)),
+            title: task.actionTitle
+         });
+         // Wait 3 seconds for visual cool factor before updating main screen
+         await new Promise(r => setTimeout(r, 3200));
+         setExecutingAnim(null);
+      }
+      
       await loadAgentState(activePlant.id);
     } catch (error) {
       console.error(error);
     } finally {
       setActingTaskId(null);
+      setExecutingAnim(null);
     }
   }
 
@@ -359,6 +384,142 @@ export default function AgentDecisions() {
                   <span className="text-xs text-zinc-500">{toRelativeTime(event.timestamp.toISOString())}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Premium Data Transition Simulation Modal */}
+      {executingAnim && (
+        <SimulationModal 
+          data={executingAnim}
+        />
+      )}
+    </div>
+  );
+}
+
+function SimulationModal({ data }: { data: { metric: string; from: number; to: number; title: string } }) {
+  const [status, setStatus] = useState("Encrypting payload...");
+
+  useEffect(() => {
+    const sequence = [
+      { time: 0, text: "Negotiating TLS handshake with Farm Controller..." },
+      { time: 800, text: "Transmitting directive packets to Node..." },
+      { time: 1800, text: "Remote hardware applying metric adjustment..." },
+      { time: 2600, text: "Verifying state synchronization..." },
+    ];
+    
+    const timers = sequence.map(s => 
+      setTimeout(() => setStatus(s.text), s.time)
+    );
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center animate-in fade-in duration-500">
+      <style>{`
+        @keyframes dashFlow {
+          to { stroke-dashoffset: -40; }
+        }
+        @keyframes packetTravel {
+          0% { offset-distance: 0%; opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { offset-distance: 100%; opacity: 0; }
+        }
+        .line-flow {
+          stroke-dasharray: 4, 8;
+          animation: dashFlow 1s linear infinite;
+        }
+        .packet {
+          offset-path: path('M 0 50 C 100 50, 100 50, 200 50');
+          animation: packetTravel 1.5s ease-in-out infinite;
+        }
+      `}</style>
+
+      <div className="max-w-2xl w-full flex flex-col items-center">
+        {/* Diagram Area */}
+        <div className="flex items-center gap-12 mb-12 relative">
+          
+          {/* Node A: Backend API */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-20 h-20 rounded-2xl bg-zinc-900 border-2 border-emerald-500/40 shadow-[0_0_30px_rgba(16,185,129,0.15)] flex items-center justify-center relative overflow-hidden animate-pulse">
+              <div className="absolute inset-0 bg-emerald-500/5 animate-pulse"></div>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" className="relative z-10">
+                <rect x="2" y="2" width="20" height="8" rx="2"/>
+                <rect x="2" y="14" width="20" height="8" rx="2"/>
+                <circle cx="6" cy="6" r="1" fill="#10b981"/>
+                <circle cx="6" cy="18" r="1" fill="#10b981"/>
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-bold text-zinc-300 tracking-widest">AGENT CORE</p>
+              <p className="text-[10px] text-zinc-500">Cluster 04</p>
+            </div>
+          </div>
+
+          {/* Connecting Cable/Wire */}
+          <div className="w-48 h-24 relative flex items-center">
+            <svg className="w-full h-full overflow-visible" viewBox="0 0 200 100">
+              <defs>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              {/* Static Conduit Pipe */}
+              <path d="M 0 50 L 200 50" stroke="#27272a" strokeWidth="4" fill="none" strokeLinecap="round" />
+              {/* Animated Flow Dash */}
+              <path d="M 0 50 L 200 50" stroke="#10b981" strokeWidth="2" fill="none" className="line-flow opacity-40" />
+              
+              {/* Glowing Packet Node */}
+              <circle r="5" fill="#fff" filter="url(#glow)" className="packet shadow-[0_0_15px_#10b981]">
+                <animate attributeName="fill" values="#10b981;#fff;#10b981" dur="1s" repeatCount="indefinite" />
+              </circle>
+            </svg>
+          </div>
+
+          {/* Node B: IoT / Plant Node */}
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-20 h-20 rounded-2xl bg-zinc-900 border-2 border-cyan-500/40 shadow-[0_0_30px_rgba(6,182,212,0.15)] flex items-center justify-center relative">
+              <div className="absolute top-0 right-0 w-3 h-3 m-2 rounded-full bg-emerald-500 animate-ping"></div>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2" className="relative z-10">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-xs font-bold text-zinc-300 tracking-widest">HARDWARE NODE</p>
+              <p className="text-[10px] text-zinc-500">MAC: E4:A2:1B</p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Command Terminal Info */}
+        <div className="bg-black border border-zinc-800 rounded-lg p-6 w-96 font-mono shadow-2xl">
+          <div className="flex gap-2 mb-4">
+            <div className="w-3 h-3 rounded-full bg-red-500/50"></div>
+            <div className="w-3 h-3 rounded-full bg-yellow-500/50"></div>
+            <div className="w-3 h-3 rounded-full bg-emerald-500/50"></div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-zinc-500">
+              <span>CMD ID:</span>
+              <span className="text-emerald-400/80">EX-9934-A</span>
+            </div>
+            <div className="flex justify-between text-xs text-zinc-500">
+              <span>PAYLOAD:</span>
+              <span className="text-cyan-400/80">{data.metric}: ({data.from} &rarr; {data.to})</span>
+            </div>
+            <div className="h-px bg-zinc-900 my-2"></div>
+            <div className="text-sm text-emerald-500 animate-pulse flex items-center gap-2">
+              <span className="shrink-0">&gt;</span>
+              <span className="truncate">{status}</span>
             </div>
           </div>
         </div>

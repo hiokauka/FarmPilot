@@ -81,6 +81,7 @@ export interface AgentTask {
   executedAt?: Date;
   approvalRequired?: boolean;
   proposedRules?: Record<string, unknown>;
+  metricAdjustments?: Record<string, number>;
 }
 
 export interface AgentConfig {

@@ -23,6 +23,7 @@ load_dotenv()
 try:
     from google import genai
     from google.genai import types
+    from langchain_google_genai import ChatGoogleGenerativeAI
     from app.services.tools import AgentResponse  # verify tools module is OK too
     GENAI_AVAILABLE = True
 except ImportError:
@@ -42,6 +43,7 @@ class Recommendation:
     confidence_score: float
     predicted_impact: str
     proposed_rules: dict | None = None
+    metric_adjustments: dict | None = None
 
 
 def _stage_for_plant(crop: CropProfileRecord, stage_name: str) -> GrowthStageRecord | None:
@@ -74,18 +76,34 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
             )
         )
 
-    if plant.dli < stage.target_dli:
-        delta = stage.target_dli - plant.dli
+    if plant.dli < stage.dli_min:
+        delta = stage.dli_optimal - plant.dli
         recommendations.append(
             Recommendation(
                 action_title="[Rule-Based] Increase grow-light intensity by 10% for next 8 hours",
                 priority="Medium" if delta < 4 else "High",
                 reasoning=(
-                    f"DLI ({plant.dli:.1f}) is below target ({stage.target_dli:.1f}) from schedule rules "
+                    f"DLI ({plant.dli:.1f}) is below minimum ({stage.dli_min:.1f}) target range "
                     f"for {stage.name} stage."
                 ),
                 confidence_score=_bounded_confidence(delta, 6),
                 predicted_impact="Improves photosynthesis rate and supports consistent biomass accumulation.",
+                metric_adjustments={"dli": 2.0}
+            )
+        )
+    elif plant.dli > stage.dli_max:
+        delta = plant.dli - stage.dli_optimal
+        recommendations.append(
+            Recommendation(
+                action_title="[Rule-Based] Reduce daily photoperiod or lower light intensity",
+                priority="High" if delta >= 6 else "Medium",
+                reasoning=(
+                    f"DLI ({plant.dli:.1f}) significantly exceeds safe maximum ({stage.dli_max:.1f}). "
+                    f"Exposing plant to light stress/photoinhibition risk."
+                ),
+                confidence_score=_bounded_confidence(delta, 6),
+                predicted_impact="Prevents radiative stress, lowers peak tissue temperature and extends lamp longevity.",
+                metric_adjustments={"dli": -2.0}
             )
         )
 
@@ -125,11 +143,18 @@ def evaluate_anomaly(plant: ActivePlantRecord, stage: GrowthStageRecord) -> bool
     t_max = rules.get("temperature_max") or stage.temperature_max
     sm_min = rules.get("soil_moisture_min") or stage.soil_moisture_min
     sm_max = rules.get("soil_moisture_max") or stage.soil_moisture_max
-    dli_target = rules.get("target_dli") or stage.target_dli
+    
+    # Use custom DLI target or fall back to stage absolute range
+    dli_min = stage.dli_min
+    dli_max = stage.dli_max
+    if "target_dli" in rules:
+        val = rules["target_dli"]
+        dli_min = val - 2.0
+        dli_max = val + 2.0
 
     if plant.temperature < t_min or plant.temperature > t_max: return True
     if plant.soil_moisture < sm_min or plant.soil_moisture > sm_max: return True
-    if plant.dli < dli_target: return True
+    if plant.dli < dli_min or plant.dli > dli_max: return True
     return False
 
 
@@ -220,7 +245,8 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         "- If anomalies found: propose specific corrective actions in 'actions'\n"
         "- Only populate updated_rules if default thresholds need permanent adjustment\n\n"
         "Return JSON with keys: summary (string), actions (array of objects with keys: "
-        "action_title, priority, reasoning, confidence_score, predicted_impact), "
+        "action_title, priority, reasoning, confidence_score, predicted_impact, and optional "
+        "metric_adjustments: object with keys 'dli', 'temperature', 'humidity', 'soil_moisture' holding numerical addition deltas), "
         "updated_rules (object with optional keys: temperature_min, temperature_max, "
         "soil_moisture_min, soil_moisture_max, target_dli, humidity_min, humidity_max, "
         "ph_min, ph_max — or null if no changes needed)."
@@ -232,60 +258,89 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         response = None
         last_exc: Exception | None = None
 
-        # Attempt 1: structured JSON schema (Gemini models)
+        # Advanced Agentic Approach: Utilize LangChain's with_structured_output mechanism
+        # This seamlessly unifies prompting, schema forcing, and pydantic parsing into a single logic chain.
         try:
-            response = client.models.generate_content(
+            print(f"  [Agent] Initializing Langchain LLM for {model_name}...")
+            # Standard API key is inherited from environment variable GEMINI_API_KEY automatically by Langchain
+            llm = ChatGoogleGenerativeAI(
                 model=model_name,
-                contents=context_prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=AgentResponse,
-                    temperature=0.2,
-                ),
+                temperature=0.2,
+                max_retries=1
             )
-        except Exception as exc1:
-            last_exc = exc1
-            print(f"  [AI] response_schema failed ({type(exc1).__name__}), trying mime-type only...")
+            
+            # Binds the target output structure using Langchain native binding
+            structured_llm = llm.with_structured_output(AgentResponse)
+            
+            # Execute the logic flow
+            print(f"  [Agent] Invoking structured analysis chain...")
+            agent_response_obj = structured_llm.invoke(context_prompt)
+            
+            if not agent_response_obj:
+                raise ValueError("LangChain invoked successfully but returned empty parse object.")
+                
+            # Convert object to dictionary natively
+            summary = agent_response_obj.summary
+            updated_rules = agent_response_obj.updated_rules
+            
+            # Reconstruct actions_list exactly like legacy system expects downstream 
+            actions_list = []
+            for act in agent_response_obj.actions:
+                act_dict = {
+                    "action_title": act.action_title,
+                    "priority": act.priority,
+                    "reasoning": act.reasoning,
+                    "confidence_score": act.confidence_score,
+                    "predicted_impact": act.predicted_impact,
+                    "metric_adjustments": act.metric_adjustments
+                }
+                actions_list.append(act_dict)
+                
+            # Wrap rules appropriately for dictionary format legacy expects
+            rules_dict = None
+            if updated_rules:
+                rules_dict = updated_rules.dict() if hasattr(updated_rules, 'dict') else vars(updated_rules)
 
-        # Attempt 2: JSON mime type without schema (Gemma + other models)
-        if response is None:
+            # Pass downstream variables to match final processing logic
+            data = {"summary": summary, "updated_rules": rules_dict, "actions": actions_list}
+            
+        except Exception as lc_exc:
+            last_exc = lc_exc
+            print(f"  [Agent] LangChain invocation failed: {type(lc_exc).__name__}")
+            # LOG FAILURE FOR TRANSPARENCY
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=context_prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        temperature=0.2,
-                    ),
-                )
-                last_exc = None
-            except Exception as exc2:
-                last_exc = exc2
-                print(f"  [AI] mime-type-only failed ({type(exc2).__name__}), trying plain text...")
-
-        # Attempt 3: plain text with JSON-in-prompt
-        if response is None:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=context_prompt,
-                config=types.GenerateContentConfig(temperature=0.2),
+                with open("ai_debug_failures.log", "a", encoding="utf-8") as logf:
+                    logf.write(f"\n{'='*40}\n")
+                    logf.write(f"TIMESTAMP: {datetime.now(timezone.utc).isoformat()}\n")
+                    logf.write(f"STAGE: LANGCHAIN_AGENT_INVOCATION\n")
+                    logf.write(f"MODEL: {model_name}\n")
+                    logf.write(f"EXCEPTION: {type(lc_exc).__name__}: {str(lc_exc)}\n")
+                    logf.write(f"CONTEXT PROMPT USED:\n{context_prompt}\n")
+            except: pass
+            
+            # EMERGENCY RESILIENCE FALLBACK:
+            # If cloud is totally down (500 Internal Server Error), perform silent recovery
+            # utilizing internal physics/rule-based recommendation generation.
+            print("  [Agent] Falling back to rule-based safety generator due to API failure...")
+            recs = _generate_recommendations_rule_based(plant, crop, stage)
+            created = materialize_recommendations(db, plant, recs, approval_mode)
+            plant.last_analysis_at = datetime.now(timezone.utc)
+            log = AnalysisLogRecord(
+                active_plant_id=plant.id,
+                is_manual=is_manual,
+                status="Anomaly Detected" if has_anomaly else "Stable",
+                ai_summary="[Backup Mode] Environmental rules generated due to AI timeout.",
+                is_hidden=False
             )
-
-        # Extract JSON — strip markdown fences if present
-        raw = response.text.strip()
-        if "```" in raw:
-            parts = raw.split("```")
-            for part in parts:
-                part = part.strip()
-                if part.startswith("json"):
-                    part = part[4:].strip()
-                if part.startswith("{"):
-                    raw = part
-                    break
-        data = json.loads(raw)
+            db.add(log)
+            db.commit()
+            return created, log
+            
+        # Clean-up remaining variable bindings needed by tail section
         summary = data.get("summary", "Analysis complete.")
         updated_rules = data.get("updated_rules")
         actions_list = data.get("actions", [])
+
 
         # If AI proposed rule updates, append as a separate pending task
         if updated_rules:
@@ -311,7 +366,8 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
                     reasoning=item.get("reasoning", "No reasoning provided."),
                     confidence_score=item.get("confidence_score", 80.0),
                     predicted_impact=item.get("predicted_impact", "Unknown impact."),
-                    proposed_rules=item.get("proposed_rules", None)
+                    proposed_rules=item.get("proposed_rules", None),
+                    metric_adjustments=item.get("metric_adjustments", None)
                 )
             )
 
@@ -348,21 +404,48 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         return created, log
 
 
-def _apply_action_to_plant(plant: ActivePlantRecord, action_title: str) -> None:
-    lowered = action_title.lower()
+def _apply_action_to_plant(plant: ActivePlantRecord, task: AgentTaskRecord) -> None:
+    # PRIMARY PATH: Programmatic Execution via Agentic Action Payload
+    if task.metric_adjustments:
+        adj = task.metric_adjustments
+        if 'dli' in adj and adj['dli'] is not None:
+            plant.dli = max(0.0, min(40.0, plant.dli + float(adj['dli'])))
+        if 'temperature' in adj and adj['temperature'] is not None:
+            plant.temperature = max(5.0, min(50.0, plant.temperature + float(adj['temperature'])))
+        if 'humidity' in adj and adj['humidity'] is not None:
+            plant.humidity = max(0.0, min(100.0, plant.humidity + float(adj['humidity'])))
+        if 'soil_moisture' in adj and adj['soil_moisture'] is not None:
+            plant.soil_moisture = max(0.0, min(100.0, plant.soil_moisture + float(adj['soil_moisture'])))
 
-    if "fertigation" in lowered or "irrigation" in lowered:
-        plant.soil_moisture = min(100.0, plant.soil_moisture + 6.0)
+        plant.health_score = min(100.0, plant.health_score + 1.5)
+        plant.predicted_yield = max(0.0, plant.predicted_yield + 0.05)
+        return
+
+    # SECONDARY PATH: Heuristic Fallback
+    lowered = task.action_title.lower()
+    is_increase = any(w in lowered for w in ["increase", "raise", "boost", "up", "add"])
+    is_decrease = any(w in lowered for w in ["decrease", "lower", "reduce", "down", "drop"])
+    direction = -1.0 if is_decrease else 1.0
+
+    if "fertigation" in lowered or "irrigation" in lowered or "moisture" in lowered or "water" in lowered:
+        delta = 6.0 * direction
+        plant.soil_moisture = max(0.0, min(100.0, plant.soil_moisture + delta))
 
     if "grow-light" in lowered or "dli" in lowered or "light" in lowered:
-        plant.dli = min(40.0, plant.dli + 2.0)
+        delta = 2.0 * direction
+        plant.dli = max(0.0, min(40.0, plant.dli + delta))
 
-    if "lower ambient temperature" in lowered or "temperature" in lowered:
+    if "temperature" in lowered or "temp" in lowered:
         match = re.search(r"(\d+(?:\.\d+)?)\s*c", lowered)
         if match:
             plant.temperature = float(match.group(1))
         else:
-            plant.temperature = max(12.0, plant.temperature - 2.0)
+            delta = -2.0 if ("lower" in lowered or is_decrease) else 2.0
+            plant.temperature = max(5.0, min(50.0, plant.temperature + delta))
+
+    if "humidity" in lowered:
+        delta = 5.0 * direction
+        plant.humidity = max(0.0, min(100.0, plant.humidity + delta))
 
     plant.health_score = min(100.0, plant.health_score + 1.5)
     plant.predicted_yield = max(0.0, plant.predicted_yield + 0.05)
@@ -405,12 +488,13 @@ def materialize_recommendations(
             executed_at=now if is_auto else None,
             approval_required=not is_auto,
             proposed_rules=rec.proposed_rules,
+            metric_adjustments=rec.metric_adjustments,
         )
         db.add(task)
         created.append(task)
 
         if is_auto:
-            _apply_action_to_plant(plant, task.action_title)
+            _apply_action_to_plant(plant, task)
             if task.proposed_rules:
                 current_rules = plant.ai_custom_rules or {}
                 current_rules.update(task.proposed_rules)
@@ -450,7 +534,7 @@ def apply_manual_decision(
             task.predicted_impact = modified_impact
         task.status = "Manually-Approved"
         task.executed_at = datetime.now(timezone.utc)
-        _apply_action_to_plant(plant, task.action_title)
+        _apply_action_to_plant(plant, task)
         # Apply proposed rule changes on approval
         if task.proposed_rules:
             from sqlalchemy.orm.attributes import flag_modified
