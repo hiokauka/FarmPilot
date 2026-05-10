@@ -14,6 +14,7 @@ from app.models import (
     AgentConfigRecord,
     AgentTaskRecord,
     CropProfileRecord,
+    SensorRecord,
     NotificationRecord,
     AnalysisLogRecord,
 )
@@ -25,6 +26,25 @@ router = APIRouter(prefix="/api")
 class CreatePlantPayload(BaseModel):
     customLabel: str
     cropProfileId: str
+
+
+class CreateSensorPayload(BaseModel):
+    sensorType: str
+    modelName: str
+    batteryLevel: int = 100
+
+
+def sensor_to_dict(s: SensorRecord) -> dict:
+    return {
+        "id": s.id,
+        "type": s.sensor_type,
+        "modelName": s.model_name,
+        "batteryLevel": s.battery_level,
+        "status": s.status,
+        "activePlantId": s.active_plant_id,
+        "lastSync": s.last_sync.isoformat(),
+        "currentValue": s.current_value,
+    }
 
 
 class UpdateAgentModePayload(BaseModel):
@@ -158,8 +178,7 @@ def create_plant(payload: CreatePlantPayload, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(plant)
     return plant_to_dict(plant)
-
-
+    
 @router.get("/plants/{plant_id}/agent/config")
 def get_agent_config(plant_id: str, db: Session = Depends(get_db)):
     plant = db.get(ActivePlantRecord, plant_id)
@@ -282,52 +301,31 @@ def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
     if not plant:
         raise HTTPException(status_code=404, detail="Plant not found")
     
-    # Construct virtual sensors derived purely and cleanly from core plant columns
-    # This bypasses needing a heavy simulator while satisfying requirements perfectly.
+    # REPAIR: Connect route to ACTUAL live DB sensor records synchronized from simulator!
+    if plant.sensors:
+        return [
+            {
+                "id": s.id,
+                "type": s.sensor_type,
+                "modelName": s.model_name,
+                "batteryLevel": s.battery_level,
+                "status": s.status,
+                "activePlantId": s.active_plant_id,
+                "lastSync": s.last_sync.isoformat() if s.last_sync else None,
+                "currentValue": s.current_value
+            } for s in plant.sensors
+        ]
+    
+    # SAFE FALLBACK: Only generate default mocks if simulator hasn't initialized sensors yet.
     from datetime import timezone
     now_ts = datetime.now(timezone.utc).isoformat()
     
     return [
-        {
-            "id": f"S-TEMP-{plant.id}",
-            "sensorType": "Temperature",
-            "modelName": "DHT-22 Plus Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.temperature
-        },
-        {
-            "id": f"S-HUM-{plant.id}",
-            "sensorType": "Humidity",
-            "modelName": "DHT-22 Plus Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.humidity
-        },
-        {
-            "id": f"S-DLI-{plant.id}",
-            "sensorType": "Light",
-            "modelName": "PAR Meter X Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.dli
-        },
-        {
-            "id": f"S-SM-{plant.id}",
-            "sensorType": "Soil_Moisture",
-            "modelName": "Capacitive SM-3 Virtual",
-            "batteryLevel": 100,
-            "status": "Online",
-            "activePlantId": plant.id,
-            "lastSync": now_ts,
-            "currentValue": plant.soil_moisture
-        }
+        {"id": f"S-TEMP-{plant.id}", "type": "Temperature", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.temperature},
+        {"id": f"S-HUM-{plant.id}", "type": "Humidity", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.humidity},
+        {"id": f"S-DLI-{plant.id}", "type": "Light", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.dli},
+        {"id": f"S-SM-{plant.id}", "type": "Soil_Moisture", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.soil_moisture},
+        {"id": f"S-PH-{plant.id}", "type": "pH", "modelName": "IoT-SimNode", "batteryLevel": 100, "status": "Online", "activePlantId": plant.id, "lastSync": now_ts, "currentValue": plant.ph}
     ]
 
 
@@ -375,3 +373,33 @@ def decide_agent_task(task_id: str, payload: TaskDecisionPayload, db: Session = 
     db.commit()
     db.refresh(task)
     return task_to_dict(task)
+
+@router.post("/plants/{plant_id}/sensors")
+def create_sensor(plant_id: str, payload: CreateSensorPayload, db: Session = Depends(get_db)):
+    plant = db.get(ActivePlantRecord, plant_id)
+    if not plant:
+        raise HTTPException(status_code=404, detail="Plant not found")
+    
+    # Simple mock current value based on sensor type and plant's current metrics
+    val = 0.0
+    st = payload.sensorType
+    if st == "Temperature": val = plant.temperature
+    elif st == "Humidity": val = plant.humidity
+    elif st == "Soil_Moisture": val = plant.soil_moisture
+    elif st == "pH": val = plant.ph
+    elif st == "Light": val = plant.dli
+
+    sensor = SensorRecord(
+        id=f"S-{int(time.time() * 1000) % 10000}",
+        sensor_type=payload.sensorType,
+        model_name=payload.modelName,
+        battery_level=payload.batteryLevel,
+        status="Online",
+        active_plant_id=plant.id,
+        last_sync=datetime.utcnow(),
+        current_value=val,
+    )
+    db.add(sensor)
+    db.commit()
+    db.refresh(sensor)
+    return sensor_to_dict(sensor)

@@ -43,12 +43,12 @@ export default function AgentDecisions() {
     if (showLoader) setLoading(true);
     try {
       const [configRes, tasksRes, activityRes] = await Promise.all([
-        fetch(`${API_BASE}/api/plants/${plantId}/agent/config`),
-        fetch(`${API_BASE}/api/plants/${plantId}/agent/tasks?includeResolved=true`),
-        fetch(`${API_BASE}/api/plants/${plantId}/agent/activity?limit=20`),
+        fetch(`${API_BASE}/api/plants/${plantId}/agent/config`).catch(() => null),
+        fetch(`${API_BASE}/api/plants/${plantId}/agent/tasks?includeResolved=true`).catch(() => null),
+        fetch(`${API_BASE}/api/plants/${plantId}/agent/activity?limit=20`).catch(() => null),
       ]);
 
-      if (!configRes.ok || !tasksRes.ok || !activityRes.ok) return;
+      if (!configRes?.ok || !tasksRes?.ok || !activityRes?.ok) return;
 
       const configJson = await configRes.json();
       const tasksJson = await tasksRes.json();
@@ -163,7 +163,7 @@ export default function AgentDecisions() {
          // Get original value from context safest possible fallback
          const metricDict = activePlant.currentMetrics as Record<string, number>;
          const oldVal = metricDict[mappedKey] ?? 0;
-         const newVal = oldVal + (delta as number);
+         const newVal = Number(delta); // Now interprets absolute targets directly
          
          setExecutingAnim({
             metric: mKey.replace("_", " ").toUpperCase(),
