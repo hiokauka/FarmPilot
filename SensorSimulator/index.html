@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Sensor Node Simulator</title>
+    <style>
+        :root {
+            --bg: #0f0f13;
+            --card: #16161e;
+            --accent: #10b981;
+            --text: #e2e8f0;
+            --text-dim: #94a3b8;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2rem;
+            letter-spacing: -0.025em;
+            color: var(--accent);
+        }
+        .header p {
+            color: var(--text-dim);
+            margin-top: 0.5rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1200px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid #27272a;
+            padding: 1.5rem;
+            border-radius: 1.25rem;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .sensor-id {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            background: #1a1a23;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.5rem;
+        }
+        .sensor-type {
+            font-weight: bold;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .value-container {
+            margin: 1.5rem 0;
+        }
+        .value {
+            font-size: 3rem;
+            font-weight: 800;
+            margin: 0;
+        }
+        .unit {
+            font-size: 1.25rem;
+            color: var(--text-dim);
+            margin-left: 0.25rem;
+        }
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            border-top: 1px solid #27272a;
+            padding-top: 1rem;
+        }
+        .status-online {
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .status-online::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent);
+        }
+        .controls {
+            margin-top: 4rem;
+            display: flex;
+            gap: 1rem;
+        }
+        button {
+            background: #1a1a23;
+            border: 1px solid #27272a;
+            color: var(--text);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background: #27272a;
+            border-color: var(--accent);
+        }
+        .sync-indicator {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="sync-indicator" id="sync-time">Last Sync: Never</div>
+    
+    <div class="header">
+        <h1>IoT Node Simulator</h1>
+        <p>Broadcasting to FarmPilot Backend... Status: <span id="broadcast-status">PENDING</span></p>
+    </div>
+
+    <div class="grid" id="sensor-grid">
+        <!-- Cards will be injected here -->
+    </div>
+
+    <div class="controls">
+        <button onclick="resetSim()">Hard Reset Simulation</button>
+        <button onclick="toggleDrift()">Toggle Drift (Active)</button>
+    </div>
+
+    <script>
+        async function updateSensors() {
+            try {
+                const response = await fetch('/sensors');
+                const data = await response.json();
+                const grid = document.getElementById('sensor-grid');
+                grid.innerHTML = '';
+
+                data.forEach(s => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.innerHTML = `
+                        <div class="card-header">
+                            <span class="sensor-type">${s.type.replace('_', ' ')}</span>
+                            <span class="sensor-id">${s.id}</span>
+                        </div>
+                        <div class="value-container">
+                            <p class="value">${s.value}<span class="unit">${s.unit || ''}</span></p>
+                        </div>
+                        <div class="footer">
+                            <span class="status-online">BROADCASTING</span>
+                            <span>BATTERY: ${s.battery}%</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                document.getElementById('sync-time').innerText = 'Last Sync: ' + new Date().toLocaleTimeString();
+                document.getElementById('broadcast-status').innerText = 'ACTIVE';
+                document.getElementById('broadcast-status').style.color = '#10b981';
+            } catch (err) {
+                document.getElementById('broadcast-status').innerText = 'OFFLINE';
+                document.getElementById('broadcast-status').style.color = '#ef4444';
+            }
+        }
+
+        async function resetSim() {
+            await fetch('/reset', { method: 'POST' });
+            updateSensors();
+        }
+
+        let driftEnabled = true;
+        function toggleDrift() {
+            driftEnabled = !driftEnabled;
+            // Note: Currently drift is handled on server-side /sensors call
+            // We'd need to modify server to respect this, but for now it's just visual
+            alert('Drift behavior is currently managed by the server engine.');
+        }
+
+        // Update every 2 seconds
+        setInterval(updateSensors, 2000);
+        updateSensors();
+    </script>
+</body>
+</html>

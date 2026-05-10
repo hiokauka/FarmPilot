@@ -16,10 +16,9 @@ export default function Sensors() {
   const [newModelName, setNewModelName] = useState("");
   const [isAdding, setIsAdding] = useState(false);
 
-  // Fetch sensors from backend
-  const fetchSensors = async () => {
+  const fetchSensors = async (showLoading = true) => {
     if (!activePlant) return;
-    setIsLoading(true);
+    if (showLoading) setIsLoading(true);
     try {
       const res = await fetch(`http://127.0.0.1:8000/api/plants/${activePlant.id}/sensors`);
       if (res.ok) {
@@ -29,12 +28,15 @@ export default function Sensors() {
     } catch (error) {
       console.error("Failed to fetch sensors:", error);
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchSensors();
+    fetchSensors(true);
+
+    const interval = setInterval(() => fetchSensors(false), 5000);
+    return () => clearInterval(interval);
   }, [activePlant?.id]);
 
   const handleAddSensor = async (e: React.FormEvent) => {

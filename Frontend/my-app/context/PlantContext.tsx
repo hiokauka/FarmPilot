@@ -29,7 +29,7 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
     : null;
 
   useEffect(() => {
-    async function load() {
+    async function load(isInitial = false) {
       try {
         const [profilesRes, plantsRes] = await Promise.all([
           fetch(`${API_BASE}/api/profiles`),
@@ -50,12 +50,22 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
 
         setProfiles(profilesMap);
         setPlants(plantsData);
-        if (plantsData.length) setActivePlantId((id) => id ?? plantsData[0].id);
+        
+        if (isInitial && plantsData.length) {
+          setActivePlantId((id) => id ?? plantsData[0].id);
+        }
       } catch (err) {
         console.error("Error loading plants/profiles:", err);
       }
     }
-    load();
+
+    // Initial load
+    load(true);
+
+    // Set up polling interval
+    const interval = setInterval(() => load(false), 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const addPlant = (name: string, type: string) => {
