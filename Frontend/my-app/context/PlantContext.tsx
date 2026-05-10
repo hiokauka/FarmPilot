@@ -33,8 +33,8 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
 
     async function loadInitial() {
       try {
-        const profilesRes = await fetch(`${API_BASE}/api/profiles`);
-        if (!profilesRes.ok) throw new Error("Failed to load profiles");
+        const profilesRes = await fetch(`${API_BASE}/api/profiles`).catch(() => null);
+        if (!profilesRes?.ok) return;
         const profilesJson = await profilesRes.json();
         
         const profilesMap: Record<string, CropKnowledgeProfile> = {};
@@ -48,8 +48,8 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
 
     async function pollPlants() {
       try {
-        const plantsRes = await fetch(`${API_BASE}/api/plants`);
-        if (!plantsRes.ok) throw new Error("Failed to fetch plants");
+        const plantsRes = await fetch(`${API_BASE}/api/plants`).catch(() => null);
+        if (!plantsRes?.ok) return;
         const plantsJson = await plantsRes.json();
 
         const plantsData: ActivePlant[] = plantsJson.map((pl: { plantedAt: string; [key: string]: unknown }) => ({

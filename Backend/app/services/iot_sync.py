@@ -7,7 +7,7 @@ from app.database import SessionLocal
 from app.models import ActivePlantRecord, SensorRecord
 
 logger = logging.getLogger("iot_sync")
-SIMULATOR_URL = "http://localhost:8080/sensors"
+SIMULATOR_URL = "http://localhost:8090/sensors"
 
 async def sync_sensors_task():
     """Background task to poll the sensor simulator and update the database."""

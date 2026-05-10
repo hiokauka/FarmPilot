@@ -33,7 +33,12 @@ export default function Sensors() {
   };
 
   useEffect(() => {
-    fetchSensors(true);
+    if (!activePlant?.id) return;
+
+    // Initialize asynchronously to avoid synchronous setState during the effect registration phase.
+    setTimeout(() => {
+      fetchSensors(true);
+    }, 0);
 
     const interval = setInterval(() => fetchSensors(false), 5000);
     return () => clearInterval(interval);

@@ -309,7 +309,7 @@ def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
     return [
         {
             "id": f"S-TEMP-{plant.id}",
-            "sensorType": "Temperature",
+            "type": "Temperature",
             "modelName": "DHT-22 Plus Virtual",
             "batteryLevel": 100,
             "status": "Online",
@@ -319,7 +319,7 @@ def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
         },
         {
             "id": f"S-HUM-{plant.id}",
-            "sensorType": "Humidity",
+            "type": "Humidity",
             "modelName": "DHT-22 Plus Virtual",
             "batteryLevel": 100,
             "status": "Online",
@@ -329,7 +329,7 @@ def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
         },
         {
             "id": f"S-DLI-{plant.id}",
-            "sensorType": "Light",
+            "type": "Light",
             "modelName": "PAR Meter X Virtual",
             "batteryLevel": 100,
             "status": "Online",
@@ -339,7 +339,7 @@ def get_plant_sensors(plant_id: str, db: Session = Depends(get_db)):
         },
         {
             "id": f"S-SM-{plant.id}",
-            "sensorType": "Soil_Moisture",
+            "type": "Soil_Moisture",
             "modelName": "Capacitive SM-3 Virtual",
             "batteryLevel": 100,
             "status": "Online",
