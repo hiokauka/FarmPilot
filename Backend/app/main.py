@@ -47,7 +47,7 @@ from app.services.agent_engine import run_agent_analysis_core
 
 async def background_analysis_loop():
     while True:
-        await asyncio.sleep(60) # Run every 60 seconds
+        await asyncio.sleep(10) # Run every 10 seconds
         try:
             with SessionLocal() as db:
                 plants = db.query(ActivePlantRecord).all()

@@ -73,6 +73,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 ),
                 confidence_score=_bounded_confidence(delta, 10),
                 predicted_impact="Reduces water stress and restores stable root uptake within 6-12 hours.",
+                metric_adjustments={"soil_moisture": 5.0}
             )
         )
 
@@ -120,6 +121,65 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
                 ),
                 confidence_score=_bounded_confidence(delta, 4),
                 predicted_impact="Improves transpiration balance and protects quality under current stage conditions.",
+                metric_adjustments={"temperature": -1.5}
+            )
+        )
+    elif plant.temperature < stage.temperature_min:
+        delta = stage.temperature_min - plant.temperature
+        recommendations.append(
+            Recommendation(
+                action_title="[Rule-Based] Increase operational heating frequency",
+                priority="Medium",
+                reasoning=f"Ambient temp ({plant.temperature}) is below stage critical floor ({stage.temperature_min}).",
+                confidence_score=_bounded_confidence(delta, 3),
+                predicted_impact="Restores internal metabolic efficiency.",
+                metric_adjustments={"temperature": 1.5}
+            )
+        )
+
+    if plant.humidity > stage.humidity_max:
+        recommendations.append(
+            Recommendation(
+                action_title="[Rule-Based] Activate emergency dehumidification system",
+                priority="High",
+                reasoning=f"Humidity ({plant.humidity}%) is significantly above stage safe limit ({stage.humidity_max}%).",
+                confidence_score=85.0,
+                predicted_impact="Reduces microbial risk and controls fungal vector probabilities.",
+                metric_adjustments={"humidity": -5.0}
+            )
+        )
+    elif plant.humidity < stage.humidity_min:
+        recommendations.append(
+            Recommendation(
+                action_title="[Rule-Based] Increase air atomization (fogging) intensity",
+                priority="Medium",
+                reasoning=f"Humidity ({plant.humidity}%) is drying below optimal floor.",
+                confidence_score=82.0,
+                predicted_impact="Lowers vapor pressure deficit and prevents stomatal clamping.",
+                metric_adjustments={"humidity": 5.0}
+            )
+        )
+
+    if plant.ph < stage.ph_min:
+        recommendations.append(
+            Recommendation(
+                action_title="[Rule-Based] Apply weak alkaline balance (pH Up)",
+                priority="Medium",
+                reasoning=f"Solution pH ({plant.ph}) shows elevated acidity below safe bound.",
+                confidence_score=90.0,
+                predicted_impact="Restores nutrient availability.",
+                metric_adjustments={"ph": 0.2}
+            )
+        )
+    elif plant.ph > stage.ph_max:
+        recommendations.append(
+            Recommendation(
+                action_title="[Rule-Based] Dose acidic buffering agent (pH Down)",
+                priority="Medium",
+                reasoning=f"Solution pH ({plant.ph}) shows excess alkalinity above safe bound.",
+                confidence_score=90.0,
+                predicted_impact="Prevents iron-lockout and promotes trace element mobility.",
+                metric_adjustments={"ph": -0.2}
             )
         )
 
@@ -137,7 +197,7 @@ def _generate_recommendations_rule_based(plant: ActivePlantRecord, crop: CropPro
     return recommendations
 
 
-def evaluate_anomaly(plant: ActivePlantRecord, stage: GrowthStageRecord) -> bool:
+def evaluate_anomaly_keys(plant: ActivePlantRecord, stage: GrowthStageRecord) -> set[str]:
     rules = plant.ai_custom_rules or {}
     t_min = rules.get("temperature_min") or stage.temperature_min
     t_max = rules.get("temperature_max") or stage.temperature_max
@@ -152,10 +212,25 @@ def evaluate_anomaly(plant: ActivePlantRecord, stage: GrowthStageRecord) -> bool
         dli_min = val - 2.0
         dli_max = val + 2.0
 
-    if plant.temperature < t_min or plant.temperature > t_max: return True
-    if plant.soil_moisture < sm_min or plant.soil_moisture > sm_max: return True
-    if plant.dli < dli_min or plant.dli > dli_max: return True
-    return False
+    # Extract humidity and pH bounds from stage/rules
+    h_min = rules.get("humidity_min") or stage.humidity_min
+    h_max = rules.get("humidity_max") or stage.humidity_max
+    ph_min = rules.get("ph_min") or stage.ph_min
+    ph_max = rules.get("ph_max") or stage.ph_max
+
+    violated = set()
+    if plant.temperature < t_min or plant.temperature > t_max: 
+        violated.add("temperature")
+    if plant.soil_moisture < sm_min or plant.soil_moisture > sm_max: 
+        violated.add("soil_moisture")
+    if plant.dli < dli_min or plant.dli > dli_max: 
+        violated.add("dli")
+    if plant.humidity < h_min or plant.humidity > h_max:
+        violated.add("humidity")
+    if plant.ph < ph_min or plant.ph > ph_max:
+        violated.add("ph")
+    
+    return violated
 
 
 def run_agent_analysis_core(db: Session, plant: ActivePlantRecord, is_manual: bool = False) -> tuple[list[AgentTaskRecord], AnalysisLogRecord | None]:
@@ -191,7 +266,8 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
     config = plant.agent_config
     approval_mode = config.approval_mode if config else "ask"
 
-    has_anomaly = evaluate_anomaly(plant, stage)
+    violated_metrics = evaluate_anomaly_keys(plant, stage)
+    has_anomaly = len(violated_metrics) > 0
 
     if not has_anomaly and not is_manual:
         # Periodic check, stable, skip AI to save limits
@@ -206,6 +282,27 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
         db.add(log)
         db.commit()
         return [], log
+
+    # PRE-AI TOKEN CONSERVATION OPTIMIZATION:
+    # If the anomalies present are already covered by pending tasks, ABORT call before hitting AI!
+    from sqlalchemy import select
+    pending_tasks = db.scalars(
+        select(AgentTaskRecord).where(
+            AgentTaskRecord.active_plant_id == plant.id,
+            AgentTaskRecord.status == "Pending",
+        )
+    ).all()
+    
+    pending_metrics = set()
+    for t in pending_tasks:
+        if t.metric_adjustments:
+            pending_metrics.update(t.metric_adjustments.keys())
+            
+    # If EVERY current anomaly matches an active pending metric blocker, we can safely skip LLM call completely.
+    if has_anomaly and violated_metrics.issubset(pending_metrics):
+        print(f"  [TokenSaver] Skipping LLM call for plant {plant.id} as active anomalies ({violated_metrics}) are already in queue.")
+        # Re-return current state successfully with zero additional task creations.
+        return [], None
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key or not GENAI_AVAILABLE:
@@ -303,6 +400,16 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
 
             # Pass downstream variables to match final processing logic
             data = {"summary": summary, "updated_rules": rules_dict, "actions": actions_list}
+            
+            # ADDING COMPREHENSIVE SUCCESS TRACING FOR FULL LOGGING TRANSPARENCY:
+            try:
+                with open("ai_debug_failures.log", "a", encoding="utf-8") as logf:
+                    logf.write(f"\n{'='*40}\n")
+                    logf.write(f"TIMESTAMP: {datetime.now(timezone.utc).isoformat()}\n")
+                    logf.write(f"STAGE: LANGCHAIN_SUCCESS\n")
+                    logf.write(f"MODEL: {model_name}\n")
+                    logf.write(f"STRUCTURED OUTPUT GENERATED:\n{json.dumps(data, indent=2)}\n")
+            except: pass
             
         except Exception as lc_exc:
             last_exc = lc_exc
@@ -457,22 +564,35 @@ def materialize_recommendations(
     recommendations: list[Recommendation],
     approval_mode: str,
 ) -> list[AgentTaskRecord]:
-    existing_pending_titles = {
-        t.action_title
-        for t in db.scalars(
-            select(AgentTaskRecord).where(
-                AgentTaskRecord.active_plant_id == plant.id,
-                AgentTaskRecord.status == "Pending",
-            )
+    # Gather details on what's already queued to prevent infinite spam
+    pending_tasks = db.scalars(
+        select(AgentTaskRecord).where(
+            AgentTaskRecord.active_plant_id == plant.id,
+            AgentTaskRecord.status == "Pending",
         )
-    }
+    ).all()
+
+    existing_pending_titles = {t.action_title for t in pending_tasks}
+    existing_pending_metrics = set()
+    for t in pending_tasks:
+        if t.metric_adjustments:
+            existing_pending_metrics.update(t.metric_adjustments.keys())
 
     created: list[AgentTaskRecord] = []
     now = datetime.now(timezone.utc)
 
     for rec in recommendations:
-        if rec.action_title in existing_pending_titles and approval_mode == "ask":
+        # 1. Standard title dupe prevention
+        if rec.action_title in existing_pending_titles:
             continue
+        
+        # 2. PHYSICAL METRIC BLOCKING: If this rec targets a metric that's already being solved, SKIP.
+        # (unless in auto mode where overlapping is fine, though safety prefers suppression even then)
+        if rec.metric_adjustments:
+            targeted_keys = set(rec.metric_adjustments.keys())
+            if targeted_keys.intersection(existing_pending_metrics):
+                # Metric is already actively being tuned/addressed in pending state
+                continue
 
         is_auto = approval_mode == "auto"
         task = AgentTaskRecord(
