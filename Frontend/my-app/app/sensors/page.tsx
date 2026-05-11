@@ -4,11 +4,18 @@ import { usePlant } from "@/context/PlantContext";
 import PlantHeader from "@/components/PlantHeader";
 import { Sensor } from "@/lib/schema";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export default function Sensors() {
   const { activePlant } = usePlant();
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -170,8 +177,8 @@ export default function Sensors() {
       </div>
 
       {/* Add Sensor Modal Overlay */}
-      {isModalOpen && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {mounted && isModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[99999] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
             <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-4 py-3 rounded-lg flex items-center gap-3 mb-6">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -218,11 +225,12 @@ export default function Sensors() {
                 disabled
                 className="flex-[1.5] px-4 py-3 bg-zinc-900 text-zinc-600 rounded-xl text-xs font-bold tracking-wider transition-colors border border-zinc-800 uppercase cursor-not-allowed"
               >
-                Coming Soon
+                Pair Device
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

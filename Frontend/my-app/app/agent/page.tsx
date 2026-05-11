@@ -5,6 +5,7 @@ import PlantHeader from "@/components/PlantHeader";
 import { AgentActivityEvent, AgentTask } from "@/lib/schema";
 import { useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
+import { createPortal } from "react-dom";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
@@ -34,6 +35,12 @@ export default function AgentDecisions() {
   const [actingTaskId, setActingTaskId] = useState<string | null>(null);
   const [executingAnim, setExecutingAnim] = useState<{ metric: string; from: number; to: number; title: string } | null>(null);
   const [isModifyModalOpen, setIsModifyModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const pendingTasks = useMemo(
     () => tasks.filter((task) => task.status === "Pending"),
@@ -397,8 +404,8 @@ export default function AgentDecisions() {
       )}
 
       {/* Modify Action Modal */}
-      {isModifyModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+      {mounted && isModifyModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[99999] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
             <div className="bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs px-4 py-3 rounded-lg flex items-center gap-3 mb-6">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
@@ -427,7 +434,8 @@ export default function AgentDecisions() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

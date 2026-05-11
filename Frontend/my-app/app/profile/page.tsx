@@ -4,11 +4,18 @@ import { usePlant } from "@/context/PlantContext";
 import PlantHeader from "@/components/PlantHeader";
 import { Sensor } from "@/lib/schema";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export default function PlantProfile() {
   const { activePlant, activeProfile } = usePlant();
   const [sensors, setSensors] = useState<Sensor[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!activePlant?.id) return;
@@ -154,8 +161,8 @@ export default function PlantProfile() {
       </div>
 
       {/* Edit Parameters Development Modal */}
-      {isEditModalOpen && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {mounted && isEditModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[99999] flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
             <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-3 rounded-lg flex items-center gap-3 mb-6">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -175,13 +182,14 @@ export default function PlantProfile() {
             <div className="pt-8 flex justify-center">
               <button 
                 onClick={() => setIsEditModalOpen(false)}
-                className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-sm font-medium transition-colors border border-zinc-700"
+                className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-sm font-bold transition-all duration-200 border border-zinc-700 active:scale-[0.98]"
               >
                 Acknowledged
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
