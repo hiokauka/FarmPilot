@@ -378,18 +378,42 @@ export default function AgentDecisions() {
               {activity.length === 0 && (
                 <div className="p-4 text-sm text-zinc-500">No activity yet.</div>
               )}
-              {activity.map((event, idx) => (
-                <div key={`${event.kind}-${idx}-${event.timestamp.toISOString()}`} className="p-4 flex items-center gap-4 hover:bg-zinc-800/30 transition-colors">
-                  <div className={`w-8 h-8 rounded flex items-center justify-center ${event.kind === "notification" ? "bg-zinc-800 text-zinc-300" : event.kind === "analysis" ? "bg-cyan-500/10 text-cyan-400" : "bg-emerald-500/10 text-emerald-400"}`}>
-                    {event.kind === "notification" ? "i" : event.kind === "analysis" ? "⚡" : "✓"}
-                  </div>
+              {activity.map((event, idx) => {
+                const isRejected = event.status === "Rejected";
+                const isPending = event.status === "Pending";
+                return (
+                  <div key={`${event.kind}-${idx}-${event.timestamp.toISOString()}`} className="p-4 flex items-center gap-4 hover:bg-zinc-800/30 transition-colors">
+                    <div className={`w-8 h-8 rounded flex items-center justify-center ${
+                      event.kind === "notification" 
+                        ? "bg-zinc-800 text-zinc-300" 
+                        : event.kind === "analysis" 
+                          ? "bg-cyan-500/10 text-cyan-400" 
+                          : isRejected 
+                            ? "bg-red-500/10 text-red-400" 
+                            : isPending 
+                              ? "bg-amber-500/10 text-amber-400"
+                              : "bg-emerald-500/10 text-emerald-400"
+                    }`}>
+                      {event.kind === "notification" ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                      ) : event.kind === "analysis" ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      ) : isRejected ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      ) : isPending ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      )}
+                    </div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-zinc-300">{event.title}</p>
                     <p className="text-xs text-zinc-500">{event.detail}</p>
                   </div>
                   <span className="text-xs text-zinc-500">{toRelativeTime(event.timestamp.toISOString())}</span>
                 </div>
-              ))}
+              );
+            })}
             </div>
           </div>
         </div>

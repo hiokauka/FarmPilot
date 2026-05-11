@@ -287,6 +287,7 @@ def list_agent_activity(plant_id: str, limit: int = 20, db: Session = Depends(ge
             "timestamp": t.created_at.isoformat(),
             "title": t.action_title,
             "detail": f"{t.status} ({t.priority})",
+            "status": t.status,
         }
         for t in task_rows
     ]
@@ -296,6 +297,7 @@ def list_agent_activity(plant_id: str, limit: int = 20, db: Session = Depends(ge
             "timestamp": n.sent_at.isoformat(),
             "title": n.title,
             "detail": n.message,
+            "status": "Info",
         }
         for n in notification_rows
     ]
@@ -305,6 +307,7 @@ def list_agent_activity(plant_id: str, limit: int = 20, db: Session = Depends(ge
             "timestamp": a.created_at.isoformat(),
             "title": f"Analysis: {a.status}",
             "detail": a.ai_summary or "System check completed.",
+            "status": a.status,
         }
         for a in analysis_log_rows
     ]

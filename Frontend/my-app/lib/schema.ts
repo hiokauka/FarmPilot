@@ -95,4 +95,5 @@ export interface AgentActivityEvent {
   timestamp: Date;
   title: string;
   detail: string;
+  status?: string;
 }
