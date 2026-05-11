@@ -28,7 +28,7 @@ export default function PlantHeader({ title }: { title?: string }) {
   }, [activePlant]);
 
   const navItems = [
-    { name: "Dashboard", path: "/" },
+    { name: "Summary", path: "/" },
     { name: "Sensors", path: "/sensors" },
     { name: "Plant Profile", path: "/profile" },
     { name: "Predictive", path: "/predictive" },

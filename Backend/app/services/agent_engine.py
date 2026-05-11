@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import re
 import os
 import json
 
 from dotenv import load_dotenv
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -305,11 +305,18 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
 
     # PRE-AI TOKEN CONSERVATION OPTIMIZATION:
     # If the anomalies present are already covered by pending tasks, ABORT call before hitting AI!
-    from sqlalchemy import select
+    # Gather Pending tasks AND RECENTLY Approved tasks to close the hardware sync race condition window.
+    time_cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     pending_tasks = db.scalars(
         select(AgentTaskRecord).where(
             AgentTaskRecord.active_plant_id == plant.id,
-            AgentTaskRecord.status == "Pending",
+            or_(
+                AgentTaskRecord.status == "Pending",
+                and_(
+                    AgentTaskRecord.status.in_(["Auto-Approved", "Manually-Approved"]),
+                    AgentTaskRecord.executed_at >= time_cutoff
+                )
+            )
         )
     ).all()
     
@@ -685,10 +692,18 @@ def materialize_recommendations(
     blocked_metrics: set[str] = None  # Pass inherited blockers (interpolating sensors + active queue)
 ) -> list[AgentTaskRecord]:
     # Gather details on what's already queued to prevent infinite spam
+    # Gather details on what's already queued, including very recently approved actions
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
     pending_tasks = db.scalars(
         select(AgentTaskRecord).where(
             AgentTaskRecord.active_plant_id == plant.id,
-            AgentTaskRecord.status == "Pending",
+            or_(
+                AgentTaskRecord.status == "Pending",
+                and_(
+                    AgentTaskRecord.status.in_(["Auto-Approved", "Manually-Approved"]),
+                    AgentTaskRecord.executed_at >= cutoff
+                )
+            )
         )
     ).all()
 

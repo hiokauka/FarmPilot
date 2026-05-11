@@ -80,6 +80,7 @@ def plant_to_dict(p: ActivePlantRecord) -> dict:
         "id": p.id,
         "customLabel": p.custom_label,
         "cropProfileId": p.crop_profile_id,
+        "cropName": p.crop_profile.name,
         "status": p.status,
         "plantedAt": p.planted_at.isoformat(),
         "currentStage": p.current_stage,

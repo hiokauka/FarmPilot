@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import random
 import os
 import time
+import json
+import urllib.request
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 
@@ -45,8 +47,23 @@ def read_root():
 
 @app.get("/active_plants")
 def get_active_plants_tracked():
-    """Helper endpoint to show tracked states"""
-    return list(plant_states.keys())
+    """Helper endpoint to enrich tracked states with exact plant names from the main backend"""
+    ids = list(plant_states.keys())
+    
+    # Attempt to fetch actual Plant Name mapping from main API
+    labels = {}
+    try:
+        # Correct URL includes the '/api' prefix used by the main FastAPI router
+        with urllib.request.urlopen("http://127.0.0.1:8000/api/plants", timeout=1.0) as r:
+            if r.status == 200:
+                raw = json.loads(r.read().decode())
+                for item in raw:
+                    # Switched to customLabel per final request
+                    labels[item.get("id")] = item.get("customLabel")
+    except Exception:
+        pass # Silent fallback
+        
+    return [{"id": pid, "label": labels.get(pid, pid)} for pid in ids]
 
 @app.get("/sensors/{plant_id}")
 def get_simulated_data(plant_id: str):

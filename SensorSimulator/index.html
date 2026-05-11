@@ -184,9 +184,15 @@
             try {
                 const res = await fetch('/active_plants');
                 let plants = await res.json();
-                plants.sort(); // Apply alphabetical sorting for user ease
+                
+                // Apply alphabetical sorting for user ease
+                plants.sort((a, b) => a.label.localeCompare(b.label));
+                
                 // Check if something changed before refilling to prevent input flicker
-                if (JSON.stringify(plants) !== JSON.stringify(knownPlants)) {
+                const sig = JSON.stringify(plants);
+                const knownSig = JSON.stringify(knownPlants);
+                
+                if (sig !== knownSig) {
                     knownPlants = plants;
                     const sel = document.getElementById('plant-select');
                     // Preserve current selection if it still exists, otherwise reset to first found
@@ -202,16 +208,17 @@
 
                     plants.forEach(p => {
                         const opt = document.createElement('option');
-                        opt.value = p;
-                        opt.textContent = p;
+                        opt.value = p.id;
+                        opt.textContent = p.label;
                         sel.appendChild(opt);
                     });
 
                     // Try re-setting chosen value or select first available
-                    if (plants.includes(lastVal)) {
+                    const idx = plants.findIndex(p => p.id === lastVal);
+                    if (idx > -1) {
                         sel.value = lastVal;
                     } else {
-                        currentPlant = plants[0];
+                        currentPlant = plants[0].id;
                         sel.value = currentPlant;
                         render(); // force immediate render of first one
                     }
