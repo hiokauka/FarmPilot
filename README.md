@@ -63,14 +63,23 @@ The frontend should be available at:
 
 - `http://localhost:3000`
 
-## 3. Stop everything
+## 3. Start the sensor simulator
 
-Stop the frontend with `Ctrl+C` in the terminal running `npm run dev`.
+Open a third terminal in `sensorsimulator/` and run:
 
-Stop the backend with `Ctrl+C` in the terminal running `uvicorn`.
+```bash
+python -m pip install -r requirements.txt
+python main.py
+```
+
+The simulator provides a visual HTML control board reachable at `http://localhost:8090/` to control environment factors.
+
+## 4. Stop everything
+
+Stop the running services with `Ctrl+C` in each respective terminal window.
 
 ## Notes
 
 - SQLite keeps the hackathon setup simple and avoids Docker or a separate database server.
-- The backend seeds initial data on startup, so the app will show a sample plant, sensors, a pending agent task, and a notification the first time it runs.
-- The frontend currently uses mock UI state, but the backend database is ready for API wiring next.
+- The backend seeds initial data on startup, filling in your baseline Strawberry, Basil, and Tomato crop profiles automatically.
+- All three components (Backend, Frontend, Simulator) must be running concurrently for the full autonomous AI control loop to operate.
