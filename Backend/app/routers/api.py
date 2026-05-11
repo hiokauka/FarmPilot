@@ -22,6 +22,24 @@ from app.services.agent_engine import apply_manual_decision, materialize_recomme
 
 router = APIRouter(prefix="/api")
 
+@router.get("/docs/readme")
+def get_project_readme():
+    import os
+    try:
+        # Traverse up to root from app/routers
+        possible_paths = [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../README.md")),
+            os.path.abspath(os.path.join(os.getcwd(), "README.md")),
+            os.path.abspath(os.path.join(os.getcwd(), "../README.md"))
+        ]
+        for p in possible_paths:
+            if os.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    return {"content": f.read()}
+        raise FileNotFoundError("README not located.")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Unable to locate project README file: {e}")
+
 
 class CreatePlantPayload(BaseModel):
     customLabel: str

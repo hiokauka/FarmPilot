@@ -298,6 +298,8 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
     for t in pending_tasks:
         if t.metric_adjustments:
             pending_metrics.update(t.metric_adjustments.keys())
+        # CRITICAL ADDITION: Also infer implicitly from the task title just in case!
+        pending_metrics.update(_infer_metrics_from_title(t.action_title))
             
     # ADDING SECONDARY HARDWARE GATING:
     # Check if physical hardware is currently actively interpolating toward a target.
@@ -640,6 +642,22 @@ def _apply_action_to_plant(plant: ActivePlantRecord, task: AgentTaskRecord) -> s
     return " | ".join(applied_targets) if applied_targets else None
 
 
+def _infer_metrics_from_title(title: str) -> set[str]:
+    lowered = title.lower()
+    found = set()
+    if any(w in lowered for w in ["moisture", "irrigation", "water", "fertigation"]):
+        found.add("soil_moisture")
+    if any(w in lowered for w in ["light", "dli", "photoperiod"]):
+        found.add("dli")
+    if any(w in lowered for w in ["temp"]):
+        found.add("temperature")
+    if any(w in lowered for w in ["humid", "vapour", "vpd"]):
+        found.add("humidity")
+    if "ph" in lowered:
+        found.add("ph")
+    return found
+
+
 def materialize_recommendations(
     db: Session,
     plant: ActivePlantRecord,
@@ -662,6 +680,8 @@ def materialize_recommendations(
     for t in pending_tasks:
         if t.metric_adjustments:
             existing_pending_metrics.update(t.metric_adjustments.keys())
+        # Also infer from task titles already pending
+        existing_pending_metrics.update(_infer_metrics_from_title(t.action_title))
 
     created: list[AgentTaskRecord] = []
     now = datetime.now(timezone.utc)
@@ -671,13 +691,17 @@ def materialize_recommendations(
         if rec.action_title in existing_pending_titles:
             continue
         
-        # 2. PHYSICAL METRIC BLOCKING: If this rec targets a metric that's already being solved, SKIP.
-        # This prevents double-generating tasks for fields that are already Interpolating!
+        # 2. PHYSICAL METRIC BLOCKING: Check explicit object AND semantic text match!
+        targeted_keys = set()
         if rec.metric_adjustments:
-            targeted_keys = set(rec.metric_adjustments.keys())
-            if targeted_keys.intersection(existing_pending_metrics):
-                # Metric is already actively being tuned/addressed in pending state or active interpolation
-                continue
+            targeted_keys.update(rec.metric_adjustments.keys())
+        # ALSO infer from linguistic context in title, catching legacy/non-explicit responses!
+        targeted_keys.update(_infer_metrics_from_title(rec.action_title))
+
+        if targeted_keys.intersection(existing_pending_metrics):
+            # Metric is already actively being tuned/addressed in pending state or active interpolation!
+            print(f"  [Materialize] BLOCKED duplicate action targeting {targeted_keys}: '{rec.action_title}'")
+            continue
 
         is_auto = approval_mode == "auto"
         task = AgentTaskRecord(

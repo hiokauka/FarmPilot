@@ -89,7 +89,7 @@ def get_simulated_data(plant_id: str):
             elif metric == "humidity":
                 factor = random.uniform(-0.005, 0.005) # +/- 0.5%
             elif metric == "soil_moisture":
-                factor = random.uniform(-0.004, 0.0)   # Dries down up to 0.4% of current
+                factor = random.uniform(-0.004, 0.004) # +/- 0.4% natural fluctuation
             elif metric == "ph":
                 factor = random.uniform(-0.001, 0.001) # Logarithmic lock +/- 0.1%
             else: # dli

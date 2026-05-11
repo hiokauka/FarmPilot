@@ -140,10 +140,7 @@
         <div class="plant-selector-box">
             <label style="color: var(--text-dim); font-size: 0.8rem; font-weight: 600;">TARGET NODE:</label>
             <select id="plant-select" onchange="changePlant()">
-                <option value="ap-1">Lettuce Rack A (ap-1)</option>
-                <option value="ap-2">Strawberry Row B (ap-2)</option>
-                <option value="ap-3">Tomato Greenhouse (ap-3)</option>
-                <option value="ap-4">Basil Hydro (ap-4)</option>
+                <!-- Dynamically populated by loadPlants() -->
             </select>
         </div>
     </div>
@@ -158,6 +155,46 @@
 
     <script>
         let currentPlant = 'ap-1';
+        let knownPlants = [];
+
+        async function loadPlants() {
+            try {
+                const res = await fetch('/active_plants');
+                let plants = await res.json();
+                plants.sort(); // Apply alphabetical sorting for user ease
+                // Check if something changed before refilling to prevent input flicker
+                if (JSON.stringify(plants) !== JSON.stringify(knownPlants)) {
+                    knownPlants = plants;
+                    const sel = document.getElementById('plant-select');
+                    // Preserve current selection if it still exists, otherwise reset to first found
+                    const lastVal = currentPlant; 
+                    sel.innerHTML = '';
+                    
+                    if(plants.length === 0) {
+                         const opt = document.createElement('option');
+                         opt.textContent = 'Searching for nodes...';
+                         sel.appendChild(opt);
+                         return;
+                    }
+
+                    plants.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p;
+                        opt.textContent = p;
+                        sel.appendChild(opt);
+                    });
+
+                    // Try re-setting chosen value or select first available
+                    if (plants.includes(lastVal)) {
+                        sel.value = lastVal;
+                    } else {
+                        currentPlant = plants[0];
+                        sel.value = currentPlant;
+                        render(); // force immediate render of first one
+                    }
+                }
+            } catch(e) { console.warn("Node search failed", e); }
+        }
 
         function changePlant() {
             currentPlant = document.getElementById('plant-select').value;
@@ -165,6 +202,7 @@
         }
 
         async function render() {
+            if(!currentPlant || currentPlant === 'Searching for nodes...') return;
             try {
                 const res = await fetch(`/sensors/${currentPlant}`);
                 if(!res.ok) throw new Error("Offline");
@@ -207,7 +245,13 @@
         }
 
         setInterval(render, 1500);
-        render();
+        setInterval(loadPlants, 3000);
+        
+        // Bootstrapping sequence
+        (async () => {
+            await loadPlants();
+            render();
+        })();
     </script>
 </body>
 </html>

@@ -2,6 +2,7 @@
 
 import { usePlant } from "@/context/PlantContext";
 import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
@@ -48,7 +49,29 @@ function PlantStatusDot({ plantId, attentionNeeded }: { plantId: string; attenti
 export default function Sidebar() {
   const { plants, activePlantId, setActivePlantId, addPlant } = usePlant();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [newPlantName, setNewPlantName] = useState("");
+  
+  const [readmeContent, setReadmeContent] = useState<string>("");
+  const [loadingReadme, setLoadingReadme] = useState(false);
+
+  const handleOpenDocs = () => {
+    setIsDocModalOpen(true);
+    if (!readmeContent && !loadingReadme) {
+      setLoadingReadme(true);
+      fetch(`${API_BASE}/api/docs/readme`)
+        .then(res => res.json())
+        .then(data => {
+          setReadmeContent(data.content || "Failed to parse documentation.");
+        })
+        .catch(e => {
+          console.error(e);
+          setReadmeContent("Failed to fetch documentation from server.");
+        })
+        .finally(() => setLoadingReadme(false));
+    }
+  };
+
   const [newPlantType, setNewPlantType] = useState("Strawberry");
 
   const handleAddPlant = () => {
@@ -132,11 +155,14 @@ export default function Sidebar() {
 
         {/* Navigation / Global actions */}
         <div className="p-4 border-t border-zinc-800 space-y-1">
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 text-left">
-            <div className="w-4 h-4 rounded-full border border-current opacity-70"></div>
-            Global Overview
+          <button 
+            onClick={handleOpenDocs}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 text-left"
+          >
+            <div className="w-4 h-4 rounded flex items-center justify-center text-xs border border-current opacity-70 font-bold">?</div>
+            System Documentation
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 text-left">
+          <button className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm transition-all text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 text-left opacity-50 cursor-not-allowed">
             <div className="w-4 h-4 rounded-full border border-current opacity-70"></div>
             Settings
           </button>
@@ -190,6 +216,72 @@ export default function Sidebar() {
                 className="px-4 py-2 text-sm font-medium bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add to Farm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* System Documentation Modal */}
+      {isDocModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-[#09090b] border border-zinc-800 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-6 bg-zinc-900/50 border-b border-zinc-800 flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold text-white">Operations Manual</h2>
+                <p className="text-xs text-zinc-500 mt-1 uppercase tracking-wider font-medium">FarmPilot Control Infrastructure</p>
+              </div>
+              <button 
+                onClick={() => setIsDocModalOpen(false)}
+                className="text-zinc-500 hover:text-white transition-colors font-bold text-lg"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-8 overflow-y-auto custom-scrollbar text-sm text-zinc-300 leading-relaxed prose prose-invert max-w-none">
+              {loadingReadme ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest">Locating README.md...</p>
+                </div>
+              ) : (
+                <ReactMarkdown
+                  components={{
+                    h1: ({ ...props }) => <h1 className="text-emerald-400 text-2xl font-black mb-6 border-b border-zinc-800 pb-4" {...props} />,
+                    h2: ({ ...props }) => <h2 className="text-zinc-100 text-lg font-bold mt-8 mb-4 border-l-4 border-emerald-500 pl-3" {...props} />,
+                    h3: ({ ...props }) => <h3 className="text-zinc-200 text-base font-semibold mt-6 mb-2" {...props} />,
+                    p: ({ ...props }) => <p className="text-zinc-400 mb-4 leading-relaxed" {...props} />,
+                    ul: ({ ...props }) => <ul className="list-disc list-inside mb-4 space-y-1 text-zinc-400" {...props} />,
+                    code: ({ className, children, ...props }) => {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const isInline = !match;
+                      return isInline ? (
+                        <code className="bg-zinc-800 text-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
+                      ) : (
+                        <pre className="bg-black border border-zinc-800 rounded-xl p-4 my-4 overflow-x-auto font-mono text-emerald-500 text-xs leading-normal">
+                          <code>{children}</code>
+                        </pre>
+                      );
+                    },
+                    li: ({ ...props }) => <li className="mb-1" {...props} />,
+                    a: ({ ...props }) => <a className="text-emerald-500 hover:underline font-medium" target="_blank" rel="noreferrer" {...props} />
+                  }}
+                >
+                  {readmeContent}
+                </ReactMarkdown>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-zinc-900/50 border-t border-zinc-800 flex justify-end">
+              <button 
+                onClick={() => setIsDocModalOpen(false)}
+                className="px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-bold rounded-xl transition-all"
+              >
+                Close Manual
               </button>
             </div>
           </div>
