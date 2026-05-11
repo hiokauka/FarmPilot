@@ -333,29 +333,6 @@ def seed_database(db: Session) -> None:
         if config is None:
             db.add(AgentConfigRecord(active_plant_id=plant.id, approval_mode="ask"))
 
-    if db.get(SensorRecord, "S-104") is None:
-        db.add_all([
-            SensorRecord(id="S-104", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=84, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=22.5),
-            SensorRecord(id="S-105", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=84, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=65),
-            SensorRecord(id="S-211", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=92, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=72),
-            SensorRecord(id="S-305", sensor_type="pH", model_name="Bluelab Pulse", battery_level=45, status="Warning", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc) - timedelta(minutes=15), current_value=6.2),
-            SensorRecord(id="S-402", sensor_type="Light", model_name="PAR Meter X", battery_level=100, status="Online", active_plant_id="ap-1", last_sync=datetime.now(timezone.utc), current_value=14.5),
-        ])
-
-    if db.get(SensorRecord, "S-106") is None:
-        db.add_all([
-            SensorRecord(id="S-106", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=90, status="Online", active_plant_id="ap-2", last_sync=datetime.now(timezone.utc), current_value=20.5),
-            SensorRecord(id="S-107", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=90, status="Online", active_plant_id="ap-2", last_sync=datetime.now(timezone.utc), current_value=60),
-            SensorRecord(id="S-212", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=88, status="Online", active_plant_id="ap-2", last_sync=datetime.now(timezone.utc), current_value=76),
-        ])
-
-    if db.get(SensorRecord, "S-108") is None:
-        db.add_all([
-            SensorRecord(id="S-108", sensor_type="Temperature", model_name="DHT-22 Plus", battery_level=75, status="Online", active_plant_id="ap-3", last_sync=datetime.now(timezone.utc), current_value=25.0),
-            SensorRecord(id="S-109", sensor_type="Humidity", model_name="DHT-22 Plus", battery_level=75, status="Online", active_plant_id="ap-3", last_sync=datetime.now(timezone.utc), current_value=55),
-            SensorRecord(id="S-213", sensor_type="Soil_Moisture", model_name="Capacitive SM-3", battery_level=60, status="Online", active_plant_id="ap-3", last_sync=datetime.now(timezone.utc), current_value=72),
-        ])
-
     task = db.get(AgentTaskRecord, "t-1092")
     if task is None:
         task = AgentTaskRecord(

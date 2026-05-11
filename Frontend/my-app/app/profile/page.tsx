@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 export default function PlantProfile() {
   const { activePlant, activeProfile } = usePlant();
   const [sensors, setSensors] = useState<Sensor[]>([]);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (!activePlant?.id) return;
@@ -62,7 +63,10 @@ export default function PlantProfile() {
                 Est. Lifespan: {activeProfile.expectedLifespanDays} days.
               </p>
             </div>
-            <button className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
+            <button 
+              onClick={() => setIsEditModalOpen(true)}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700"
+            >
               Edit Parameters
             </button>
           </div>
@@ -148,6 +152,37 @@ export default function PlantProfile() {
         </div>
 
       </div>
+
+      {/* Edit Parameters Development Modal */}
+      {isEditModalOpen && (
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
+            <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs px-4 py-3 rounded-lg flex items-center gap-3 mb-6">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <div>
+                <div className="font-bold uppercase">Optimization Active</div>
+                <div className="opacity-80">Optimal targets managed by the Cultivation Engine.</div>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold text-white mb-2">Edit Parameter Profile</h3>
+            <p className="text-sm text-zinc-400 mb-6">Customize the global setpoints for this crop&apos;s current growth lifecycle.</p>
+            
+            <div className="p-4 bg-zinc-900/50 rounded-xl border border-zinc-800 text-center text-sm text-zinc-500 italic">
+              Manual threshold editing is currently under development and will be released in an upcoming update.
+            </div>
+
+            <div className="pt-8 flex justify-center">
+              <button 
+                onClick={() => setIsEditModalOpen(false)}
+                className="w-full px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-sm font-medium transition-colors border border-zinc-700"
+              >
+                Acknowledged
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -33,6 +33,7 @@ export default function AgentDecisions() {
   const [updatingMode, setUpdatingMode] = useState(false);
   const [actingTaskId, setActingTaskId] = useState<string | null>(null);
   const [executingAnim, setExecutingAnim] = useState<{ metric: string; from: number; to: number; title: string } | null>(null);
+  const [isModifyModalOpen, setIsModifyModalOpen] = useState(false);
 
   const pendingTasks = useMemo(
     () => tasks.filter((task) => task.status === "Pending"),
@@ -135,17 +136,15 @@ export default function AgentDecisions() {
 
   async function decideTask(task: AgentTask, decision: "approve" | "reject" | "modify_approve") {
     if (!activePlant) return;
+
+    if (decision === "modify_approve") {
+      setIsModifyModalOpen(true);
+      return;
+    }
+
     setActingTaskId(task.id);
     try {
       let modifiedActionTitle: string | undefined;
-      if (decision === "modify_approve") {
-        const userInput = window.prompt("Modify action title", task.actionTitle);
-        if (!userInput) {
-          setActingTaskId(null);
-          return;
-        }
-        modifiedActionTitle = userInput;
-      }
 
       const res = await fetch(`${API_BASE}/api/agent/tasks/${task.id}`, {
         method: "PATCH",
@@ -395,6 +394,40 @@ export default function AgentDecisions() {
         <SimulationModal 
           data={executingAnim}
         />
+      )}
+
+      {/* Modify Action Modal */}
+      {isModifyModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[9999] flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
+            <div className="bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs px-4 py-3 rounded-lg flex items-center gap-3 mb-6">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+              <div>
+                <div className="font-bold uppercase tracking-wider">Feature Staging</div>
+                <div className="opacity-80">Iterative overriding is in limited preview.</div>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-bold text-white mb-2">Modify and Approve</h3>
+            <p className="text-sm text-zinc-400 mb-6">Manually adjust parameters before final vector commitment.</p>
+            
+            <div className="p-5 bg-zinc-900/50 rounded-xl border border-zinc-800 space-y-3">
+              <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Status Update</div>
+              <p className="text-sm text-zinc-300 leading-relaxed italic">
+                &quot;The visual overrides system for manual trajectory adjustments is currently undergoing deployment. Direct approval remains fully functional.&quot;
+              </p>
+            </div>
+
+            <div className="pt-8">
+              <button 
+                onClick={() => setIsModifyModalOpen(false)}
+                className="w-full px-4 py-3.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-sm font-bold transition-all duration-200 border border-zinc-700 active:scale-[0.98]"
+              >
+                Dismiss Notification
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

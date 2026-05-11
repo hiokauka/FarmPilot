@@ -172,24 +172,26 @@ export default function Sensors() {
       {/* Add Sensor Modal Overlay */}
       {isModalOpen && (
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in">
+          <div className="bg-[#0f0f13] border border-zinc-800 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-fade-in relative overflow-hidden">
+            <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-4 py-3 rounded-lg flex items-center gap-3 mb-6">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div>
+                <div className="font-bold">MODULE UNDER CONSTRUCTION</div>
+                <div className="opacity-80">Manual pairing locked. Auto-discovery is live.</div>
+              </div>
+            </div>
+
             <h3 className="text-xl font-bold text-white mb-2">Add New Sensor</h3>
             <p className="text-sm text-zinc-400 mb-6">Link a new IoT sensor to {activePlant.customLabel}.</p>
             
-            <form onSubmit={handleAddSensor} className="space-y-5">
+            <div className="space-y-5 opacity-50 pointer-events-none grayscale">
               <div>
                 <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Sensor Type</label>
                 <select 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                  value={newSensorType}
-                  onChange={(e) => setNewSensorType(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white"
+                  disabled
                 >
-                  <option value="Temperature">Temperature</option>
-                  <option value="Humidity">Humidity</option>
-                  <option value="Soil_Moisture">Soil Moisture</option>
-                  <option value="pH">pH Sensor</option>
-                  <option value="EC">Electrical Conductivity (EC)</option>
-                  <option value="Light">Light / DLI Meter</option>
+                  <option>Temperature</option>
                 </select>
               </div>
 
@@ -197,35 +199,28 @@ export default function Sensors() {
                 <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Hardware Model Name</label>
                 <input 
                   type="text" 
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                  placeholder="e.g. DHT-22 Plus"
-                  value={newModelName}
-                  onChange={(e) => setNewModelName(e.target.value)}
-                  required
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white"
+                  placeholder="Auto-discovery handles this"
+                  disabled
                 />
               </div>
+            </div>
 
-              <div className="pt-4 flex gap-3">
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-sm font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-                <button 
-                  type="submit"
-                  disabled={isAdding || !newModelName.trim()}
-                  className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center"
-                >
-                  {isAdding ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    "Add to Farm"
-                  )}
-                </button>
-              </div>
-            </form>
+            <div className="pt-8 flex gap-3">
+              <button 
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="flex-1 px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+              <button 
+                disabled
+                className="flex-[1.5] px-4 py-3 bg-zinc-900 text-zinc-600 rounded-xl text-xs font-bold tracking-wider transition-colors border border-zinc-800 uppercase cursor-not-allowed"
+              >
+                Coming Soon
+              </button>
+            </div>
           </div>
         </div>
       )}
