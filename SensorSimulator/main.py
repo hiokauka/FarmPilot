@@ -27,6 +27,9 @@ plant_states: Dict[str, Dict[str, float]] = {}
 # Memory Targets per plant: plant_targets[plant_id] = { "temperature": 24.0 }
 plant_targets: Dict[str, Dict[str, float]] = {}
 
+# Rate Limiting Drift: Ensures manual UI renders don't force advance physical time
+plant_last_tick: Dict[str, float] = {}
+
 def get_default_state():
     return {
         "temperature": round(20.0 + random.uniform(-2, 4), 2),
@@ -47,59 +50,70 @@ def get_active_plants_tracked():
 
 @app.get("/sensors/{plant_id}")
 def get_simulated_data(plant_id: str):
+    now_ts = time.time()
+    
     # Initialize state if missing
     if plant_id not in plant_states:
         plant_states[plant_id] = get_default_state()
+        plant_last_tick[plant_id] = now_ts
     if plant_id not in plant_targets:
         plant_targets[plant_id] = {}
         
     state = plant_states[plant_id]
     targets = plant_targets[plant_id]
     
-    metrics = ["temperature", "humidity", "soil_moisture", "ph", "dli"]
+    # RATE GATE: If it's been less than 1.0 seconds since last tick, skip drift entirely.
+    # This allows manual set_value overrides to call 'render' immediately without
+    # stepping the random simulator.
+    time_since_tick = now_ts - plant_last_tick.get(plant_id, 0)
+    should_drift = time_since_tick >= 1.0
     
-    # DRIFT ENGINE
-    for metric in metrics:
-        current_val = state.get(metric, 20.0)
+    if should_drift:
+        plant_last_tick[plant_id] = now_ts
+        metrics = ["temperature", "humidity", "soil_moisture", "ph", "dli"]
         
-        # PHASE A: If has an AI-driven active target, move toward it!
-        if metric in targets:
-            tgt_val = targets[metric]
-            diff = tgt_val - current_val
+        # DRIFT ENGINE
+        for metric in metrics:
+            current_val = state.get(metric, 20.0)
             
-            if abs(diff) < 0.1:
-                # Almost reached. Snap to it and delete the target.
-                state[metric] = tgt_val
-                del targets[metric]
-            else:
-                # Interpolate smoothly. 
-                # We'll use a "step approach" simulated over each tick.
-                # Tweak step size depending on metric.
-                step = 0.25 if metric in ["temperature", "humidity", "soil_moisture"] else 0.05
-                direction = 1 if diff > 0 else -1
-                # Move at most total 'step' per request
-                move = min(abs(diff), step) * direction
-                state[metric] = round(current_val + move, 2)
-        
-        # PHASE B: Normal natural random drift if NO target active
-        else:
-            # Convert to dynamic percentage-based drift (fair scaling for large/small values)
-            if metric == "temperature":
-                factor = random.uniform(-0.005, 0.005) # +/- 0.5%
-            elif metric == "humidity":
-                factor = random.uniform(-0.005, 0.005) # +/- 0.5%
-            elif metric == "soil_moisture":
-                factor = random.uniform(-0.004, 0.004) # +/- 0.4% natural fluctuation
-            elif metric == "ph":
-                factor = random.uniform(-0.001, 0.001) # Logarithmic lock +/- 0.1%
-            else: # dli
-                factor = random.uniform(-0.006, 0.006) # +/- 0.6%
+            # PHASE A: If has an AI-driven active target, move toward it!
+            if metric in targets:
+                tgt_val = targets[metric]
+                diff = tgt_val - current_val
                 
-            # Calculate drift based on current scalar magnitude, minimum base of 1.0
-            base_mag = abs(current_val) if abs(current_val) > 1.0 else 1.0
-            drift = base_mag * factor
+                if abs(diff) < 0.1:
+                    # Almost reached. Snap to it and delete the target.
+                    state[metric] = tgt_val
+                    del targets[metric]
+                else:
+                    # Interpolate smoothly. 
+                    # We'll use a "step approach" simulated over each tick.
+                    # Tweak step size depending on metric.
+                    step = 0.25 if metric in ["temperature", "humidity", "soil_moisture"] else 0.05
+                    direction = 1 if diff > 0 else -1
+                    # Move at most total 'step' per request
+                    move = min(abs(diff), step) * direction
+                    state[metric] = round(current_val + move, 2)
             
-            state[metric] = round(current_val + drift, 2)
+            # PHASE B: Normal natural random drift if NO target active
+            else:
+                # Convert to dynamic percentage-based drift (fair scaling for large/small values)
+                if metric == "temperature":
+                    factor = random.uniform(-0.005, 0.005) # +/- 0.5%
+                elif metric == "humidity":
+                    factor = random.uniform(-0.005, 0.005) # +/- 0.5%
+                elif metric == "soil_moisture":
+                    factor = random.uniform(-0.004, 0.004) # +/- 0.4% natural fluctuation
+                elif metric == "ph":
+                    factor = random.uniform(-0.001, 0.001) # Logarithmic lock +/- 0.1%
+                else: # dli
+                    factor = random.uniform(-0.006, 0.006) # +/- 0.6%
+                    
+                # Calculate drift based on current scalar magnitude, minimum base of 1.0
+                base_mag = abs(current_val) if abs(current_val) > 1.0 else 1.0
+                drift = base_mag * factor
+                
+                state[metric] = round(current_val + drift, 2)
 
     # CLAMPS
     state["temperature"] = max(5.0, min(45.0, state["temperature"]))
@@ -169,6 +183,22 @@ def set_metric_target(plant_id: str, data: TargetUpdateRequest):
         plant_targets[plant_id][m] = float(data.target)
         print(f"SYSTEM: Set plant {plant_id} metric {m} to TARGET {data.target}")
         return {"status": "accepted", "plant": plant_id, "metric": m, "target": data.target}
+    
+    return {"status": "ignored", "reason": "invalid metric"}
+
+@app.post("/sensors/{plant_id}/set_value")
+def set_metric_value(plant_id: str, data: TargetUpdateRequest):
+    """Instantly overwrites the current scalar state for a metric, circumventing the gradual drift logic."""
+    if plant_id not in plant_states:
+        plant_states[plant_id] = get_default_state()
+    
+    m = data.metric.lower().replace(" ", "_")
+    if m == "light": m = "dli"
+    
+    if m in ["temperature", "humidity", "soil_moisture", "ph", "dli"]:
+        plant_states[plant_id][m] = float(data.target)
+        print(f"SYSTEM [MANUAL OVERRIDE]: Set plant {plant_id} metric {m} to VALUE {data.target}")
+        return {"status": "accepted", "plant": plant_id, "metric": m, "value": data.target}
     
     return {"status": "ignored", "reason": "invalid metric"}
 

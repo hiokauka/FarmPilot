@@ -130,6 +130,29 @@
             font-weight: 600;
         }
         button:hover { border-color: var(--accent); }
+        .adjust-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+        }
+        .adjust-btn {
+            flex: 1;
+            padding: 0.4rem;
+            font-size: 0.75rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            color: var(--text);
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.1s ease;
+        }
+        .adjust-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--text-dim);
+        }
+        .adjust-btn:active { transform: scale(0.96); }
     </style>
 </head>
 <body>
@@ -227,6 +250,10 @@
                                 &rarr; TARGETING ${s.target.toFixed(2)}${s.unit}
                             </div>
                         ` : ''}
+                        <div class="adjust-group">
+                            <button class="adjust-btn" onclick="adjustValue('${s.type}', ${s.value}, 0.9)">-10%</button>
+                            <button class="adjust-btn" onclick="adjustValue('${s.type}', ${s.value}, 1.1)">+10%</button>
+                        </div>
                         <div class="footer">
                             <span>${s.id}</span>
                             <span>BAT: ${s.battery}%</span>
@@ -237,6 +264,19 @@
             } catch (err) {
                 console.error(err);
             }
+        }
+
+        async function adjustValue(metricType, currentVal, multiplier) {
+            if(!currentPlant) return;
+            const newVal = Number((currentVal * multiplier).toFixed(2));
+            try {
+                await fetch(`/sensors/${currentPlant}/set_value`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ metric: metricType, target: newVal })
+                });
+                render(); // optimistic visual sync
+            } catch (e) { console.error(e); }
         }
 
         async function forceReset() {

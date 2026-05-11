@@ -36,6 +36,25 @@ import threading
 _RUNNING_ANALYSIS_LOCK = threading.Lock()
 _ACTIVE_PLANT_RUNS = set()
 
+def _format_ai_error_summary(exc: Exception) -> str:
+    """Produces a refined and clean summary string optimized for UI view from raw exceptions."""
+    msg = str(exc).lower()
+    ename = type(exc).__name__
+    
+    if "429" in msg or "quota" in msg or "exhausted" in msg:
+        return "[Fallback] AI Rate Limit Reached (429). Using safety rules."
+    if "500" in msg or "internal" in msg:
+        return "[Fallback] AI Server Down (500). Using safety rules."
+    if "404" in msg or "not found" in msg:
+        return "[Fallback] AI Model Error (404). Using safety rules."
+    if "403" in msg or "permission" in msg:
+        return "[Fallback] AI Permission Denied (403). Using safety rules."
+        
+    # General fallback
+    raw_msg = str(exc)
+    truncated = (raw_msg[:45] + '...') if len(raw_msg) > 45 else raw_msg
+    return f"[Fallback] {ename}: {truncated}"
+
 @dataclass
 class Recommendation:
     action_title: str
@@ -465,7 +484,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
             # EMERGENCY RESILIENCE FALLBACK:
             # If cloud is totally down (500 Internal Server Error), perform silent recovery
             # utilizing internal physics/rule-based recommendation generation.
-            print("  [Agent] Falling back to rule-based safety generator due to API failure...")
+            print(f"  [Agent] Falling back to rule-based safety generator due to API failure: {type(lc_exc).__name__}: {lc_exc}")
             recs = _generate_recommendations_rule_based(plant, crop, stage)
             created = materialize_recommendations(db, plant, recs, approval_mode, pending_metrics)
             plant.last_analysis_at = datetime.now(timezone.utc)
@@ -473,7 +492,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
                 active_plant_id=plant.id,
                 is_manual=is_manual,
                 status="Anomaly Detected" if has_anomaly else "Stable",
-                ai_summary="[Backup Mode] Environmental rules generated due to AI timeout.",
+                ai_summary=_format_ai_error_summary(lc_exc),
                 is_hidden=False
             )
             db.add(log)
@@ -540,7 +559,7 @@ def _run_agent_analysis_internal(db: Session, plant: ActivePlantRecord, is_manua
             active_plant_id=plant.id,
             is_manual=is_manual,
             status="Anomaly Detected" if has_anomaly else "Stable",
-            ai_summary="[Fallback] Analysis failed.",
+            ai_summary=_format_ai_error_summary(e),
             is_hidden=False
         )
         db.add(log)
