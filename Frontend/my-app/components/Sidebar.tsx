@@ -137,22 +137,6 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {/* Legend */}
-        <div className="px-4 pt-3 pb-2 border-t border-zinc-800/50">
-          <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-2">Status Legend</p>
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-              <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" /> Attention needed
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-              <div className="w-2 h-2 rounded-full bg-red-500" /> Sensor offline
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-zinc-500">
-              <div className="w-2 h-2 rounded-full bg-emerald-500" /> All systems online
-            </div>
-          </div>
-        </div>
-
         {/* Navigation / Global actions */}
         <div className="p-4 border-t border-zinc-800 space-y-1">
           <button 

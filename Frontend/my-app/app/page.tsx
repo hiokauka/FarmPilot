@@ -30,10 +30,10 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col bg-[#09090b] animate-fade-in">
+    <div className="flex-1 flex flex-col bg-[#09090b] animate-fade-in h-full">
       <PlantHeader title="Dashboard Overview" />
 
-      <div className="p-8 space-y-8">
+      <div className="p-8 space-y-8 flex-1 overflow-y-auto">
         
         {/* Growth Progress */}
         <section className="glass-card rounded-2xl p-6 stagger-1">

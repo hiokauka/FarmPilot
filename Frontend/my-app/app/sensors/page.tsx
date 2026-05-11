@@ -93,7 +93,7 @@ export default function Sensors() {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-[#09090b] animate-fade-in relative">
+    <div className="flex-1 flex flex-col bg-[#09090b] animate-fade-in relative h-full">
       <PlantHeader title="Sensor Network" />
 
       <div className="p-8 space-y-8 flex-1 overflow-y-auto">

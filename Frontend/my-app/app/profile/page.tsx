@@ -56,10 +56,10 @@ export default function PlantProfile() {
   ];
 
   return (
-    <div className="flex-1 flex flex-col bg-[#09090b] animate-fade-in">
+    <div className="flex-1 flex flex-col bg-[#09090b] animate-fade-in h-full">
       <PlantHeader title="Optimal Profile" />
 
-      <div className="p-8 space-y-8">
+      <div className="p-8 space-y-8 flex-1 overflow-y-auto">
         
         <div className="glass-card p-8 rounded-2xl stagger-1">
           <div className="flex justify-between items-start mb-8">

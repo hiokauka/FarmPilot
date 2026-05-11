@@ -98,10 +98,10 @@ export default function Predictive() {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#09090b] overflow-y-auto">
+    <div className="flex-1 flex flex-col bg-[#09090b] h-full">
       <PlantHeader title="Predictive Analysis" />
 
-      <div className="p-8 space-y-8 max-w-7xl mx-auto w-full pb-20">
+      <div className="p-8 space-y-8 max-w-7xl mx-auto w-full pb-20 flex-1 overflow-y-auto">
         
         {/* Top Row: Risk and Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -313,10 +313,10 @@ export default function Predictive() {
                  ))}
 
                  {/* Forecast Lines */}
-                 {['temp', 'soil', 'dli'].map((key, ki) => (
+                 {(['temp', 'soil', 'dli'] as const).map((key, ki) => (
                    <motion.path
                      key={key}
-                     d={`M ${data.forecastPoints.map((p, i) => `${i * 100},${200 - (p as any)[key] * (key === 'soil' ? 1.5 : 4)}`).join(' L ')}`}
+                     d={`M ${data.forecastPoints.map((p, i) => `${i * 100},${200 - p[key] * (key === 'soil' ? 1.5 : 4)}`).join(' L ')}`}
                      fill="none"
                      stroke={ki === 0 ? '#fbbf24' : ki === 1 ? '#38bdf8' : '#34d399'}
                      strokeWidth="4"
